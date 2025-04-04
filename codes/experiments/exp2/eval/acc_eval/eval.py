@@ -219,7 +219,6 @@ def main():
 
             if model_conf["type"]=="dynamic-snn":
                 a=scale_predictor.predict_scale_trajectory(inputs.permute((1,0,*[i+2 for i in range(inputs.ndim-2)]))) #encoderに通す前に予測
-                print(f"a: {a}")
             #>> encoderに通す >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             inputs=encoder(inputs)
             inputs[inputs>0.0]=1.0
