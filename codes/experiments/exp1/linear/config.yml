@@ -1,0 +1,17 @@
+# 基準のconfig. コード内で時定数を変える
+model:
+  type: dynamic-snn
+  
+  in-size: 1
+  hiddens: [8,8]
+  out-size: 1
+  dropout: 0.0
+
+  dt: 0.006 #s
+  init-tau: 0.05 #dt/tauが1を超えないようにする
+  min-tau: 0.001
+  v-threshold: 0.01
+  v-rest: 0.0
+  reset-mechanism: zero
+  spike-grad: fast-sigmoid
+  output-membrane: true

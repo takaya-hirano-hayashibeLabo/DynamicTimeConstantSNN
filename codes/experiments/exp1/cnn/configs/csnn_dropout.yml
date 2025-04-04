@@ -1,0 +1,23 @@
+model:
+  type: dynamic-snn
+
+  in-size: 2
+  in-channel: 1
+  out-size: 4
+  hiddens: [4,8]
+  pool-type: avg
+  pool-size: [2,1]
+  is-bn: false #batch normalizationするかどうか
+
+  linear-hidden: 8
+
+  dropout: 0.3
+
+  dt: 0.006 #s
+  init-tau: 0.05 #dt/tauが1を超えないようにする.
+  min-tau: 0.001
+  v-threshold: 0.01
+  v-rest: 0.0
+  reset-mechanism: zero
+  spike-grad: fast-sigmoid
+  output-membrane: true

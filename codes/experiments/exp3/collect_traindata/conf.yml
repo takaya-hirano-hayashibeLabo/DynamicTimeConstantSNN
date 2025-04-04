@@ -1,0 +1,12 @@
+#ゆっくりな軌道にした
+trajectory:
+  type: eight-figure #8figure trajectry
+  origin: [0.4, 0]
+  max_distance: [0.25, 0.075]
+  angle: 1.5708  # np.pi/2.0
+  num_loops: 10
+  loop_duration: 5
+  delta_time: 0.07
+  noise_std: -1
+  fx: 1
+  fy: 2
