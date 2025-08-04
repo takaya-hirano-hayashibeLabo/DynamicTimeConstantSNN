@@ -19,19 +19,19 @@
     <light pos="0 0 1.5" directional="true"/>
     <geom name="floor" size="1 1 0.01" type="plane" material="grid"/>
 
-    <!-- エンドエフェクタの赤い四角箱 -->
+    <!-- red box -->
     <body name="target" pos="0.5 0 .5" quat="0 1 0 0" mocap="true">
-      <geom type="box" size=".05 .05 .05" contype="0" conaffinity="0" rgba=".6 .3 .3 .0"/> <!-- alphaを0にしてる -->
+      <geom type="box" size=".05 .05 .05" contype="0" conaffinity="0" rgba=".6 .3 .3 .0"/> <!-- alpha is 0 -->
     </body>
 
-    <!-- 四角箱 -->
+    <!-- square box -->
     <body name="wall" pos="0.5 0 0.1">
-      <geom name="wall" type="box" size=".1 .1 .1" rgba=".6 .3 .3 .0"/> <!-- alphaを0にしてる -->
+      <geom name="wall" type="box" size=".1 .1 .1" rgba=".6 .3 .3 .0"/> <!-- alpha is 0 -->
     </body>
 
   </worldbody>
 
-  <sensor> <!-- 床と四角箱からの距離センサ -->
+  <sensor> <!-- distance sensor from floor and square box -->
     <!-- <fromto geom1="wrist_3_link" geom2="wall" cutoff="1"/>
     <fromto geom1="wrist_3_link" geom2="floor" cutoff="1"/> -->
   </sensor>

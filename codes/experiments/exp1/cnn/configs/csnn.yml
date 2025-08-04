@@ -7,14 +7,14 @@ model:
   hiddens: [4,8]
   pool-type: avg
   pool-size: [2,1]
-  is-bn: false #batch normalizationするかどうか
+  is-bn: false # Whether to use batch normalization
 
   linear-hidden: 8
 
   dropout: 0.0
 
   dt: 0.006 #s
-  init-tau: 0.05 #dt/tauが1を超えないようにする.
+  init-tau: 0.05 # Make sure dt/tau does not exceed 1.
   min-tau: 0.001
   v-threshold: 0.01
   v-rest: 0.0

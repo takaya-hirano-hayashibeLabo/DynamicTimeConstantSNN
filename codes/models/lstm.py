@@ -69,19 +69,19 @@ class LSTM(nn.Module):
         #     num_layers=self.hidden_num,
         # )
 
-        self.lstm=CustomLSTM( #pytorchのLSTMはループがC++で速すぎるため. SNNと速度比較し辛い
+        self.lstm=CustomLSTM(
             input_size=self.in_size,
             hidden_size=self.hidden,
             num_layers=self.hidden_num,
         )
 
-        #>> 出力層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> output layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules=[]
         modules+=[
             nn.Linear(self.hidden,self.out_size),
         ]
         self.out_layer=nn.Sequential(*modules)
-        #<< 出力層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< output layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
     def forward(self,x:torch.Tensor):
@@ -91,7 +91,7 @@ class LSTM(nn.Module):
         """
 
         out, (hn,cn)=self.lstm(x)
-        out=self.out_layer(out[-1]) #最終stepだけ出力とする
+        out=self.out_layer(out[-1]) #output only the last step
 
         return out
     
@@ -115,17 +115,17 @@ def add_residual_block(
         in_size,in_channel,out_channel,kernel,stride,padding,is_bias,residual_block_num,is_bn,pool_type,pool_size,dropout,
         ):
     """
-    param: in_size: 幅と高さ (正方形とする)
+    param: in_size: width and height (square)
     param: in_channel: channel size
-    param: out_channel: 出力チャネルのサイズ
-    param: kernel: カーネルサイズ
-    param: stride: ストライドのサイズ
-    param: padding: パディングのサイズ
-    param: is_bias: バイアスを使用するかどうか
-    param: residual_block_num: ResBlock内のCNNの数 (0でもいい)
-    param: is_bn: バッチ正規化を使用するかどうか
-    param: pool_type: プーリングの種類 ("avg"または"max")
-    param: pool_size: プールのサイズ
+    param: out_channel: output channel size
+    param: kernel: kernel size
+    param: stride: stride size
+    param: padding: padding size
+    param: is_bias: whether to use bias
+    param: residual_block_num: number of CNNs in ResBlock (0 is also OK)
+    param: is_bn: whether to use batch normalization
+    param: pool_type: pooling type ("avg" or "max")
+    param: pool_size: pool size
     param: dropout: dropout rate
     """
     
@@ -149,7 +149,7 @@ def add_residual_block(
         elif pool_type=="max".casefold():
             block.append(nn.MaxPool2d(pool_size))
 
-    #blockの出力サイズを計算
+    #calculate the output size of the block
     block_outsize=get_conv_outsize(nn.Sequential(*block),in_size=in_size,in_channel=in_channel) #[1(batch) x channel x h x w]
 
     block.append(
@@ -173,7 +173,7 @@ class ResNetLSTM(nn.Module):
         self.in_channel = conf["in-channel"]
         self.out_size = conf["out-size"]
         self.hiddens = conf["hiddens"]
-        self.residual_blocks=conf["residual-block"] #残差ブロックごとのCNNの数
+        self.residual_blocks=conf["residual-block"] #number of CNNs in ResBlock
         self.pool_type = conf["pool-type"]
         self.pool_size=conf["pool-size"]
         self.is_bn = conf["is-bn"]
@@ -185,7 +185,7 @@ class ResNetLSTM(nn.Module):
 
 
 
-        #>> 入力層 1次元にflattenする用のlayer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> input layer to flatten the input >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules=[]
 
         in_c=self.in_channel
@@ -209,7 +209,7 @@ class ResNetLSTM(nn.Module):
         ]
 
         self.in_layer=nn.Sequential(*modules)
-        #<< 入力層 1次元にflattenする用のlayer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< input layer to flatten the input <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
@@ -219,7 +219,6 @@ class ResNetLSTM(nn.Module):
             num_layers=self.lstm_h_num,
         )
 
-        #pytorchのLSTMはループがC++で速すぎるためSNNと速度比較し辛い. そこで自前で実装
         # self.lstm=CustomLSTM( 
         #     input_size=self.linear_hidden,
         #     hidden_size=self.lstm_hidden,
@@ -227,13 +226,13 @@ class ResNetLSTM(nn.Module):
         # )
 
 
-        #>> 出力層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> output layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules=[]
         modules+=[
             nn.Linear(self.lstm_hidden,self.out_size),
         ]
         self.out_layer=nn.Sequential(*modules)
-        #<< 出力層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< output layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
@@ -247,7 +246,7 @@ class ResNetLSTM(nn.Module):
         out=self.in_layer(x.reshape(T*batch_size,c,h,w))
         out=out.reshape(T, batch_size, -1)
         out, _=self.lstm(out)
-        out=self.out_layer(out[-1]) #最終stepだけ出力とする
+        out=self.out_layer(out[-1]) #output only the last step
 
         return out
 

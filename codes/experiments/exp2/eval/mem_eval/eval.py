@@ -1,6 +1,6 @@
 """
-各層の発火を見てみる  
-そして、それに即した倍率で時間スケールを変更してみる  
+see the firing of each layer
+and change the time scale according to it
 """
 
 from pathlib import Path
@@ -29,13 +29,13 @@ from utils import load_yaml
 def custom_collate_fn(batch):
     inputs, targets = zip(*batch)
     
-    # numpy.ndarrayをTensorに変換
+    # convert numpy.ndarray to Tensor
     inputs = [torch.tensor(input) for input in inputs]
     
-    # パディングを使用してテンソルのサイズを揃える
+    # pad the tensor to the same size
     inputs_padded = pad_sequence(inputs, batch_first=True)
     
-    # targetsは整数のリストなので、そのままテンソルに変換
+    # targets is a list of integers, so convert it to a tensor
     targets_tensor = torch.tensor(targets)
     
     return inputs_padded, targets_tensor
@@ -82,9 +82,9 @@ def main():
     parser.add_argument("--target",default="")
     parser.add_argument("--device",default=0)
     parser.add_argument("--saveto",default="dynamic-snn")
-    parser.add_argument("--batch_head",type=int,default=-1,help="0未満だと全てのバッチを対象とする")
-    parser.add_argument("--batch_idx",type=int,default=-1,help="0未満だと全てのバッチを対象とする")
-    parser.add_argument("--a",type=float,default=1.0,help="時間軸の倍率")
+    parser.add_argument("--batch_head",type=int,default=-1,help="if less than 0, all batches are targeted")
+    parser.add_argument("--batch_idx",type=int,default=-1,help="if less than 0, all batches are targeted")
+    parser.add_argument("--a",type=float,default=1.0,help="time scale")
     args=parser.parse_args()
 
     target_batch_head=int(args.batch_head)
@@ -103,7 +103,7 @@ def main():
     json.dump(args_dict,open(resdir/"args.json","w"),indent=4)
 
 
-    #>> configの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> config preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     device=torch.device(f"cuda:{args.device}") if torch.cuda.is_available() else torch.device("cpu")
     resultpath=Path(args.target)/"result"
     if not os.path.exists(resultpath):
@@ -113,13 +113,13 @@ def main():
     train_conf:dict
     train_conf,model_conf=conf["train"],conf["model"]
     model_conf["output-membrane"]=True
-    #<< configの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< config preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-    #>> モデルの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> model preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     model_conf["memory-lifstate"]=True
-    #>> モデルの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> model preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     if model_conf["type"]=="dynamic-snn".casefold():
         if "res".casefold() in model_conf["cnn-type"]:
             model=DynamicResCSNN(model_conf)
@@ -136,7 +136,7 @@ def main():
     modelname="model_best.pth"
     model.load_state_dict(torch.load(Path(args.target)/f"result/{modelname}",map_location=device))
     model.to(device)
-    #<< モデルの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< model preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
     model.eval()
 
@@ -167,11 +167,11 @@ def main():
     predicted_labels_base=[]
     for batch_head, (base_in, targets) in tqdm(enumerate(testloader)):
 
-        if target_batch_head>=0 and batch_head!=target_batch_head: continue #指定されたバッチヘッド以外はスキップ
+        if target_batch_head>=0 and batch_head!=target_batch_head: continue #skip if not the specified batch head
 
         base_in=base_in[:,:time_sequence]
         base_in_count=base_in.clone()
-        base_in[base_in>0]=1.0 #スパイククリップ
+        base_in[base_in>0]=1.0 #spike clip
         base_in=torch.Tensor(base_in).permute(1,0,2,3,4)
 
         with torch.no_grad():
@@ -179,7 +179,7 @@ def main():
 
         for batch_i in range(base_s.shape[1]):
 
-            if target_batch_idx>=0 and batch_i!=target_batch_idx: continue #指定されたバッチインデックス以外はスキップ
+            if target_batch_idx>=0 and batch_i!=target_batch_idx: continue #skip if not the specified batch index
 
             # print(f"base_in spike counts: {base_in[:,batch_i].sum()}")
             # print(f"base_v shape: {base_v[:,batch_i].shape}")
@@ -212,11 +212,11 @@ def main():
     predicted_labels=[]
     for batch_head, (scaled_in, targets) in tqdm(enumerate(testloader_scaled)):
 
-        if target_batch_head>=0 and batch_head!=target_batch_head: continue #指定されたバッチヘッド以外はスキップ
+        if target_batch_head>=0 and batch_head!=target_batch_head: continue #skip if not the specified batch head
 
         scaled_in=scaled_in[:,:int(a*time_sequence)]
         scaled_in_count=scaled_in.clone()
-        scaled_in[scaled_in>0]=1.0 #スパイククリップ
+        scaled_in[scaled_in>0]=1.0 #spike clip
         scaled_in=torch.Tensor(scaled_in).permute(1,0,2,3,4)
         print(f"scaled_in spike counts: {scaled_in.sum()}")
 
@@ -231,7 +231,7 @@ def main():
 
         for batch_i in range(scaled_s.shape[1]):
 
-            if target_batch_idx>=0 and batch_i!=target_batch_idx: continue #指定されたバッチインデックス以外はスキップ
+            if target_batch_idx>=0 and batch_i!=target_batch_idx: continue #skip if not the specified batch index
 
             # print(f"scaled_in spike counts: {scaled_in[:,batch_i].sum()}")
             # print(f"scaled_v shape: {scaled_v[:,batch_i].shape}")

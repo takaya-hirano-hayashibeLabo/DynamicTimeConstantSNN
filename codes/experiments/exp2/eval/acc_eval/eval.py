@@ -56,13 +56,13 @@ def plot_and_save_curves(result, resultpath, epoch):
 def custom_collate_fn(batch):
     inputs, targets = zip(*batch)
     
-    # numpy.ndarrayをTensorに変換
+    # convert numpy.ndarray to Tensor
     inputs = [torch.tensor(input) for input in inputs]
     
-    # パディングを使用してテンソルのサイズを揃える
+    # pad the tensor to the same size
     inputs_padded = pad_sequence(inputs, batch_first=True)
     
-    # targetsは整数のリストなので、そのままテンソルに変換
+    # targets is a list of integers, so convert it to a tensor
     targets_tensor = torch.tensor(targets)
     
     return inputs_padded, targets_tensor
@@ -94,11 +94,11 @@ def random_drop_and_average(data_list, droprate):
 
 def random_drop_accuracy(labels:np.ndarray,droprate:float) -> float:
     """
-    ランダムにドロップして平均を取る関数
-    これでstdを作る
-    :param labels: (predict,target)のリスト
-    :param droprate: ドロップする割合
-    :return<float>: ドロップしたときのaccuracy
+    function to drop randomly and take the average
+    this is used to create std
+    :param labels: list of (predict,target)
+    :param droprate: rate to drop
+    :return<float>: accuracy when dropped
     """
 
     all_indeces=np.arange(len(labels))
@@ -113,14 +113,14 @@ def random_drop_accuracy(labels:np.ndarray,droprate:float) -> float:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--target', type=str,help="configのあるパス")
-    parser.add_argument("--device",default=0,help="GPUの番号")
-    parser.add_argument("--timescale",default=1,type=float,help="何倍に時間をスケールするか. timescale=2でtimewindowが1/2になる.")
-    parser.add_argument("--saveto",required=True,help="結果を保存するディレクトリ")
-    parser.add_argument("--modelname",default="model_best.pth",help="モデルのファイル名")
+    parser.add_argument('--target', type=str,help="path to config")
+    parser.add_argument("--device",default=0,help="GPU number")
+    parser.add_argument("--timescale",default=1,type=float,help="timescale. timescale=2 means timewindow=1/2")
+    parser.add_argument("--saveto",required=True,help="path to save result")
+    parser.add_argument("--modelname",default="model_best.pth",help="model file name")
     parser.add_argument("--is_video", action='store_true')
-    parser.add_argument("--testnum",type=int,default=5,help="stdを求めるために何回testするか")
-    parser.add_argument("--test_droprate",type=float,default=0.3,help="testデータにランダム性を持たせるために, 1minibatchごとにdropするrate")
+    parser.add_argument("--testnum",type=int,default=5,help="number of trials to calculate std")
+    parser.add_argument("--test_droprate",type=float,default=0.3,help="rate to drop 1 minibatch for test data")
     args = parser.parse_args()
 
     timescale=args.timescale
@@ -134,7 +134,7 @@ def main():
         os.makedirs(result_dir)
 
 
-    #>> configの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> config preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     device=torch.device(f"cuda:{args.device}") if torch.cuda.is_available() else torch.device("cpu")
     conf=load_yaml(Path(args.target)/"conf.yml")
     train_conf:dict
@@ -142,12 +142,12 @@ def main():
 
     # minibatch=train_conf["batch"]
     minibatch=16
-    sequence=train_conf["sequence"] #時系列のタイムシーケンス
-    #<< configの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    sequence=train_conf["sequence"] #time series sequence
+    #<< config preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-    #>> モデルの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> model preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     if model_conf["type"]=="dynamic-snn".casefold():
         if "res".casefold() in model_conf["cnn-type"]:
             model=DynamicResCSNN(model_conf)
@@ -172,18 +172,18 @@ def main():
 
     scale_predictor=ScalePredictor(datatype="gesture")
 
-    encoder=torch.nn.Identity() #デフォルトは何もしない
+    encoder=torch.nn.Identity() #default is nothing
     print(f"encoder: {encoder}")
-    #<< モデルの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< model preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
 
-    #>> データの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> data preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     time_window=int(train_conf["timewindow"]/timescale) if "timewindow" in train_conf.keys() else int(train_conf["time-window"]/timescale)
     if model_conf["in-size"]==128:
         transform=torchvision.transforms.Compose([
-            tonic.transforms.Denoise(filter_time=10000), #denoiseって結構時間かかる??
+            tonic.transforms.Denoise(filter_time=10000), #denoise is time-consuming
             tonic.transforms.ToFrame(sensor_size=tonic.datasets.DVSGesture.sensor_size,time_window=time_window),
             torch.from_numpy,
         ])
@@ -200,7 +200,7 @@ def main():
     testset=tonic.datasets.DVSGesture(save_to=ROOT/"data/original-data",train=False,transform=transform)
     testset=tonic.DiskCachedDataset(testset,cache_path=cache_path)
     test_loader = DataLoader(testset,   batch_size=minibatch, shuffle=False,collate_fn=custom_collate_fn,num_workers=3,drop_last=False)
-    #<< データの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< data preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
     # Validation step
@@ -214,15 +214,15 @@ def main():
 
             inputs, targets = inputs.to(device).to(torch.float), targets.to(device)
 
-            if sequence>0 and inputs.shape[1]>sequence*timescale: #configでシーケンスが指定された場合はその長さに切り取る
+            if sequence>0 and inputs.shape[1]>sequence*timescale: #if sequence is specified in config, cut to that length
                 inputs=inputs[:,:int(sequence*timescale)]
 
             if model_conf["type"]=="dynamic-snn":
-                a=scale_predictor.predict_scale_trajectory(inputs.permute((1,0,*[i+2 for i in range(inputs.ndim-2)]))) #encoderに通す前に予測
-            #>> encoderに通す >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+                a=scale_predictor.predict_scale_trajectory(inputs.permute((1,0,*[i+2 for i in range(inputs.ndim-2)]))) #predict before encoder
+            #>> encoder >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             inputs=encoder(inputs)
             inputs[inputs>0.0]=1.0
-            #<< encoderに通す <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            #<< encoder <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
             inputs=inputs.permute((1,0,*[i+2 for i in range(inputs.ndim-2)])) #[timestep x batch x x_dim]
 
@@ -280,7 +280,7 @@ def main():
     print_terminal(f"done\n")
 
 
-    ##>> 入力確認 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    ##>> input check >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     if args.is_video:
         print_terminal(f"saveing sample videos...")
         video_size=320
@@ -295,7 +295,7 @@ def main():
                 fps=60,scale=int(video_size/model_conf["in-size"])
             )
         print_terminal("done")
-    ##<< 入力確認 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    ##<< input check <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 

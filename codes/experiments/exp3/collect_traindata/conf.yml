@@ -1,4 +1,4 @@
-#ゆっくりな軌道にした
+#slow trajectory
 trajectory:
   type: eight-figure #8figure trajectry
   origin: [0.4, 0]

@@ -1,6 +1,6 @@
 """
-時系列分散表現から連続値を予測するためのクラス
-ここをattentionにしてもいいと思う
+predict continuous value from time series representation
+this can be replaced with attention
 """
 
 import torch
@@ -13,8 +13,8 @@ class ContinuousSNN(nn.Module):
 
     def __init__(self,conf:dict, time_encoder:DynamicSNN):
         """
-        :param conf: 連続値予測の出力層のconfig
-        :param time_encoder: 時系列表現に落とすモデル(DynamicSNNとか)
+        :param conf: output layer config for continuous value prediction
+        :param time_encoder: model to convert time series representation (DynamicSNN and so on)
         """
         super(ContinuousSNN,self).__init__()
 
@@ -77,7 +77,7 @@ class ContinuousSNN(nn.Module):
         in_sp=inspikes.permute((1,0,*[i+2 for i in range(inspikes.ndim-2)])) #[T x N x xdim]
         _,_,out_v=self.time_encoder.forward(in_sp) #[T x N x outdim]
 
-        out_v=out_v.permute(1,2,0) #[N x outdim x T] 時間方向は関連させない
+        out_v=out_v.permute(1,2,0) #[N x outdim x T] do not relate time direction
         out:torch.Tensor=self.model(out_v) #[N x outdim x T]
 
         if return_v:

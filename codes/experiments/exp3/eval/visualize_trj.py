@@ -1,5 +1,5 @@
 """
-集めた軌道で動かすだけのスクリプト
+Script to move the collected trajectory
 """
 
 from pathlib import Path
@@ -22,7 +22,7 @@ from exp3_utils import np2SE3_target,save_video
 
 import argparse
 import pandas as pd
-sys.path.append(str(ROOT/"codes")) #モデルを入れる
+sys.path.append(str(ROOT/"codes")) #put model here
 from utils import load_json2dict
 
 
@@ -67,31 +67,31 @@ def modify_renderer_scene(scn, pos_trajectory,rgba_trj,width=4):
 if __name__ == "__main__":
 
     parser=argparse.ArgumentParser()
-    parser.add_argument("--trjpath",required=True, help="絶対パス")
+    parser.add_argument("--trjpath",required=True, help="absolute path")
     args=parser.parse_args()
 
     trj_datapath=Path(args.trjpath)
 
 
 
-    #>> データの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>    
+    #>> data preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>    
     datasets=pd.read_csv(trj_datapath/"trajectory.csv")
     target_datas=datasets[["target_x","target_y"]].values
 
     config=load_json2dict(trj_datapath/"args.json")
     delta_time=config["args"]["deltatime"]
     sequence=config["nn_conf"]["train"]["sequence"] if config["args"]["nhead"] is None else config["args"]["nhead"]
-    #>> データの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> data preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
     model = mujoco.MjModel.from_xml_path(_XML.as_posix())
 
 
-    #>> キャプチャ用 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> capture >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     width,height=240,240
     renderer=mujoco.Renderer(model,width,height)
     frames=[]
-    #>> キャプチャ用 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> capture >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
     configuration = mink.Configuration(model)
 
@@ -184,7 +184,7 @@ if __name__ == "__main__":
                         quaternion=[1,0,0,0],
                         position=[target_x,target_y,0.3]
                     )
-                    end_effector_task.set_target(T_wt) #ここでSE3型のクォータニオンとxyz座標を与えるだけ
+                    end_effector_task.set_target(T_wt) #just give quaternion and xyz coordinates here
 
                     # Compute velocity and integrate into the next configuration.
                     vel = mink.solve_ik(
@@ -214,7 +214,7 @@ if __name__ == "__main__":
                         frames.append(frame)
 
                     # Visualize at fixed FPS.
-                    viewer.sync() #これをつけるとアームの動きが描画される
+                    viewer.sync() #if this is added, the arm motion is visualized
                     # rate.sleep()
 
             

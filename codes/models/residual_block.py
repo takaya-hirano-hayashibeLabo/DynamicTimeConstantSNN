@@ -20,9 +20,9 @@ def get_conv_outsize(model,in_size,in_channel):
 class ResidualBlock(nn.Module):
     def __init__(self,in_channel,out_channel,kernel=3,stride=1,padding=1,num_block=1,bias=True,dropout=0.3):
         """
-        CNNのみの残差ブロック
-        このResidualでは入出力のサイズは変わらない (channelはもちろん変わる)
-        :param num_block: 入力のCNN以外に何個のCNNを積むか
+        Residual block with only CNN
+        In this Residual, the input and output size are the same (channel is obviously different)
+        :param num_block: number of CNNs in ResBlock
         """
         super(ResidualBlock,self).__init__()
 
@@ -59,7 +59,7 @@ class ResidualBlock(nn.Module):
 
     def forward(self,x):
         """
-        残差を足して出力
+        add residual and output
         """
         out=self.model(x)
         residual=self.shortcut(x)
@@ -69,14 +69,14 @@ class ResidualBlock(nn.Module):
 
 class ResidualLIFBlock(ResidualBlock):
     """
-    活性化をLIFとした残差ブロック
+    Residual block with LIF activation
     """
 
     def __init__(
             self,in_size:tuple,in_channel,out_channel,kernel=3,stride=1,padding=1,num_block=1,bias=False,dropout=0.3,
             dt=0.01,init_tau=0.5,min_tau=0.1,threshold=1.0,vrest=0,reset_mechanism="zero",spike_grad=surrogate.fast_sigmoid(),output=False,is_train_tau=True):
         """
-        出力は電流(=スパイクではない)
+        output is current (not spike)
         """
         super(ResidualLIFBlock,self).__init__(
             in_channel,out_channel,kernel,stride,padding,num_block,bias,dropout,
@@ -92,7 +92,7 @@ class ResidualLIFBlock(ResidualBlock):
         
         for _ in range(num_block):
 
-            #blockの出力サイズを計算
+            #calculate the output size of the block
             module_outsize=get_conv_outsize(nn.Sequential(*modules),in_size=in_size,in_channel=in_channel) #[1(batch) x channel x h x w]
             modules.append(
                 LIF(
@@ -145,7 +145,7 @@ class ResidualDynaLIFBlock(ResidualBlock):
             v_actf=None
             ):
         """
-        出力は電流(=スパイクではない)
+        output is current (not spike)
         """
         super(ResidualDynaLIFBlock,self).__init__(
             in_channel,out_channel,kernel,stride,padding,num_block,bias,dropout,
@@ -161,7 +161,7 @@ class ResidualDynaLIFBlock(ResidualBlock):
         
         for _ in range(num_block):
 
-            #blockの出力サイズを計算
+            #calculate the output size of the block
             module_outsize=get_conv_outsize(nn.Sequential(*modules),in_size=in_size,in_channel=in_channel) #[1(batch) x channel x h x w]
             modules+=[
                 DynamicLIF(
@@ -205,11 +205,11 @@ class ResidualDynaLIFBlock(ResidualBlock):
 
     def set_dynamic_params(self,a):
         """
-        LIFの時定数&膜抵抗を変動させる関数
-        :param a: [スカラ]その瞬間の時間スケール
+        function to change the time constant and membrane resistance of LIF
+        :param a: [scalar] time scale at that moment
         """
         for layer in self.model:
-            if isinstance(layer,DynamicLIF): #ラプラス変換によると時間スケールをかけると上手く行くはず
+            if isinstance(layer,DynamicLIF): #Laplace transform should work if the time scale is multiplied
                 layer.a = a
 
 
@@ -221,7 +221,7 @@ class ResidualDynaLIFBlock(ResidualBlock):
 
     def get_tau(self):
         """
-        tauを取得するだけ
+        get tau
         """
 
         taus={}
@@ -239,12 +239,12 @@ class ResidualDynaLIFBlock(ResidualBlock):
 
     def test_set_dynamic_param_list(self,a:list):
         """
-        LIFの時定数&膜抵抗を変動させる関数
-        :param a: [スカラ]その瞬間の時間スケール
+        function to change the time constant and membrane resistance of LIF
+        :param a: [scalar] time scale at that moment
         """
         a_list_tmp=deepcopy(a)
         for idx,layer in enumerate(self.model):
-            if isinstance(layer,DynamicLIF): #ラプラス変換によると時間スケールをかけると上手く行くはず
+            if isinstance(layer,DynamicLIF): #Laplace transform should work if the time scale is multiplied
                 layer.a = a_list_tmp.pop(0)
         
         return a_list_tmp

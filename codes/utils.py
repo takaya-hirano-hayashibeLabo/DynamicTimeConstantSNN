@@ -21,9 +21,9 @@ class CustomDataset(Dataset):
 
 def print_terminal(contents="",pre="\033[96m",suffi="\033[0m"):
     """
-    :param pre:接頭
-    :param contentns: 末尾をカットされてもいいcontents
-    :param suffi: 接尾
+    :param pre: prefix
+    :param contentns: contents
+    :param suffi: suffix
     """
 
     import shutil
@@ -54,7 +54,7 @@ def load_single_hdf5(path):
 
 def load_hdf5(file_path_list: list, num_workers: int = 64):
     """
-    pathのリストからhdf5ファイルを読み込み, データを返す
+    read hdf5 files from a list of paths, return data
     :return datas: [batch x time_sequence x ...]
     :return targets: [batch]
     """
@@ -79,7 +79,7 @@ def save_dict2json(data, saveto):
 
 
 def load_json2dict(file_path):
-    """JSONファイルをdictとしてロードする関数"""
+    """function to load a JSON file as a dict"""
     import json
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -88,11 +88,11 @@ def load_json2dict(file_path):
 
 def resample_scale(a: list, target_length: int) -> list:
     """
-    1次元のリストを指定した長さにリサンプリングする関数
-    線形補間を使用
-    :param data: リサンプリングする1次元のリスト
-    :param target_length: リサンプリング後の長さ
-    :return: リサンプリングされたリスト
+    function to resample a 1D list to a specified length
+    use linear interpolation
+    :param data: 1D list to resample
+    :param target_length: length after resampling
+    :return: resampled list
     """
     original_length = len(a)
     if original_length == target_length:
@@ -107,10 +107,10 @@ def resample_scale(a: list, target_length: int) -> list:
 
 def spike2timestamp(spike:np.ndarray,dt:float):
     """
-    0か1のスパイク列をスパイクのタイムスタンプに変換する関数
+    function to convert a spike column of 0 or 1 to a spike timestamp
     :param spike: [time-sequence x ...]
-    :return timestamp: スパイクのある時刻 
-    :return idx_x: スパイクある空間位置
+    :return timestamp: timestamp of the spike
+    :return idx_x: spatial position of the spike
     """
     idx_sp=np.argwhere(spike==1)
     idx_t=idx_sp[:,0]
@@ -121,7 +121,7 @@ def spike2timestamp(spike:np.ndarray,dt:float):
 
 def timestamp2spike(timestamp:np.ndarray,idx_x,dt,spike_shape:tuple):
     """
-    :param spike_shape: 時間以外の次元のサイズ
+    :param spike_shape: size of dimensions other than time
     """
     from math import ceil
 
@@ -138,15 +138,15 @@ def timestamp2spike(timestamp:np.ndarray,idx_x,dt,spike_shape:tuple):
 def scale_sequence(data:np.ndarray,a:list,dt:float):
     """
     :param data: [batch x time-sequence x ...]
-    :param a: スケーリングのリスト. 1以上[time-sequence]
-    :param dt: dataの⊿t
+    :param a: list of scaling. 1 or more [time-sequence]
+    :param dt: delta t of data
     """
     from math import ceil
 
     elapsed = np.cumsum(np.concatenate(([0], a[:-1]))) * dt
     T_max=ceil(elapsed[-1]/dt)
     scaled_data=[]
-    for data_i in tqdm(data): #バッチ一つずつ処理する
+    for data_i in tqdm(data): #process one batch at a time
         timestamp, idx_x=spike2timestamp(data_i,dt)
 
         scaled_timestamp = np.zeros_like(timestamp)
@@ -172,7 +172,7 @@ def scale_sequence(data:np.ndarray,a:list,dt:float):
 
 def calculate_accuracy(output, target):
     """
-    LSTMとかのaccチェックするための関数
+    function to check the accuracy of LSTM and others
     """
     import torch
     predicted:torch.Tensor = torch.argmax(output, 1)
@@ -187,7 +187,7 @@ from math import ceil
 class Event2Frame():
     def __init__(self, sensor_size,time_window):
         """
-        :param sensor_size: (channel x h x w) ※必ずこの順番で与える
+        :param sensor_size: (channel x h x w) ※give in this order
         """
         self.sensor_size=sensor_size
         self.time_window=time_window
@@ -235,7 +235,7 @@ def resize_heatmap(frame:np.ndarray, scale:int=5):
     """
     import cv2
     h,w=frame.shape
-    frame=((frame+1)/2*255).astype(np.uint8) #[-1,1]を[0,255]に変換
+    frame=((frame+1)/2*255).astype(np.uint8) #convert [-1,1] to [0,255]
     resized_heatmap=cv2.resize(frame,(w*scale,h*scale),interpolation=cv2.INTER_NEAREST)
     return resized_heatmap
 
@@ -324,11 +324,11 @@ def save_heatmap_video(frames, output_path, file_name, fps=30, scale=5, frame_la
 
 def create_windows(data:torch.Tensor, window, overlap=0.5):
     """
-    時系列データをウィンドウに分割する関数
-    :param data: 時系列データ (torch tensor) [T x m]
-    :param window: ウィンドウサイズ
-    :param overlap: オーバーラップ率
-    :return: ウィンドウに分割されたデータ (torch tensor) [N x window x m]
+    function to split time series data into windows
+    :param data: time series data (torch tensor) [T x m]
+    :param window: window size
+    :param overlap: overlap rate
+    :return: data split into windows (torch tensor) [N x window x m]
     """
     T, m = data.shape
     step = window - int(window*overlap)
@@ -339,7 +339,7 @@ def create_windows(data:torch.Tensor, window, overlap=0.5):
         start = i * step
         end = start + window
         window_data=data[start:end, :]
-        if window_data.shape[0]<window: #ウィンドウサイズより小さい場合はおしまい
+        if window_data.shape[0]<window: #if the window size is smaller than the window size, end
             break
         windows.append(window_data)
     
