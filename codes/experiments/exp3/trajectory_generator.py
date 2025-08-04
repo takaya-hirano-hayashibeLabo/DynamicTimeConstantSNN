@@ -28,36 +28,36 @@ def generate_trajectory(config:dict):
 
 def generate_ellipse_trajectory(origin, semi_axes, num_loops, loop_duration, delta_time, angle, noise_std=0.01):
     """
-    楕円形の軌道を生成する
-    :param origin: 軌道の原点 [x,y]
-    :param semi_axes: 楕円の半径 [a,b]
-    :param num_loops: 軌道のループ数
-    :param loop_duration: 1つの軌道を描く時間 [s]
-    :param delta_time: 軌道の時間刻み [s]
-    :param angle: z軸周りの回転角度 [rad]
-    :param noise_std: ホワイトノイズの標準偏差
-    :return: 軌道のリスト [(time, x, y)]
+    generate ellipse trajectory
+    :param origin: trajectory origin [x,y]
+    :param semi_axes: ellipse semi-axes [a,b]
+    :param num_loops: number of loops
+    :param loop_duration: time to draw one trajectory [s]
+    :param delta_time: time step of trajectory [s]
+    :param angle: rotation angle around z-axis [rad]
+    :param noise_std: standard deviation of white noise
+    :return: trajectory list [(time, x, y)]
     """
     x_origin, y_origin = origin
     a, b = semi_axes
     trajectory = []
     total_time = 0.0
 
-    # 回転行列の計算
+    # calculate rotation matrix
     cos_angle = np.cos(angle)
     sin_angle = np.sin(angle)
 
     t = 0.0
     while t < loop_duration*num_loops:
-        # 楕円形の軌道を生成
+        # generate ellipse trajectory
         x = a * np.cos(2 * np.pi * t / loop_duration,dtype=np.double)
         y = b * np.sin(2 * np.pi * t / loop_duration,dtype=np.double)
 
-        # 回転を適用 (originを中心に)
+        # apply rotation (origin is center)
         x_rotated = cos_angle * x - sin_angle * y + x_origin
         y_rotated = sin_angle * x + cos_angle * y + y_origin
 
-        # ホワイトノイズを追加  
+        # add white noise
         if noise_std > 0:
             x_rotated = x_rotated + np.random.normal(0, noise_std)
             y_rotated = y_rotated + np.random.normal(0, noise_std)
@@ -71,36 +71,36 @@ def generate_ellipse_trajectory(origin, semi_axes, num_loops, loop_duration, del
 
 def generate_eight_trajectory(origin, max_distance, num_loops, loop_duration, delta_time, angle, noise_std=0.01,fx=2,fy=4):
     """
-    8の字軌道を生成する
-    :param origin: 軌道の原点 [x,y]
-    :param max_distance: 軌道の原点からの最大距離 [x,y]
-    :param num_loops: 軌道のループ数
-    :param loop_duration: 1つの軌道を描く時間 [s]
-    :param delta_time: 軌道の時間刻み [s]
-    :param angle: z軸周りの回転角度 [rad]
-    :param noise_std: ホワイトノイズの標準偏差
-    :return: 軌道のリスト [(time, x, y)]
+    generate 8 trajectory
+    :param origin: trajectory origin [x,y]
+    :param max_distance: maximum distance from origin [x,y]
+    :param num_loops: number of loops
+    :param loop_duration: time to draw one trajectory [s]
+    :param delta_time: time step of trajectory [s]
+    :param angle: rotation angle around z-axis [rad]
+    :param noise_std: standard deviation of white noise
+    :return: trajectory list [(time, x, y)]
     """
     x_origin, y_origin = origin
     max_x, max_y = max_distance
     trajectory = []
     total_time = 0.0
 
-    # 回転行列の計算
+    # calculate rotation matrix
     cos_angle = np.cos(angle)
     sin_angle = np.sin(angle)
 
     t = 0.0
     while t < loop_duration*num_loops:
-        # 8の字の軌道を生成
+        # generate 8 trajectory
         x = max_x * np.sin(fx * np.pi * t / loop_duration)
         y = max_y * np.sin(fy * np.pi * t / loop_duration)
 
-        # 回転を適用 (originを中心に)
+        # apply rotation (origin为中心)
         x_rotated = cos_angle * x - sin_angle * y + x_origin
         y_rotated = sin_angle * x + cos_angle * y + y_origin
 
-        # ホワイトノイズを追加  
+        # add white noise
         if noise_std > 0:
             x_rotated = x_rotated + np.random.normal(0, noise_std)
             y_rotated = y_rotated + np.random.normal(0, noise_std)
@@ -125,10 +125,10 @@ def animate_trajectory(trajectory):
     ax.set_xlim([1.2*min_val,1.2*max_val])
     ax.set_ylim([1.2*min_val,1.2*max_val])
 
-    # 軌跡を保持するためのリスト
+    # list to store trajectory
     x_data, y_data = [], []
 
-    # 初期化
+    # initialize
     line_segments = LineCollection([], linewidths=2)
     ax.add_collection(line_segments)
 
@@ -141,11 +141,11 @@ def animate_trajectory(trajectory):
         x_data.append(x)
         y_data.append(y)
 
-        # 軌跡のセグメントを作成
+        # create trajectory segments
         points = np.array([x_data, y_data]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
-        # 色を時間に応じて変化させる
+        # change color according to time
         norm = plt.Normalize(0, len(x_data))
         colors = plt.cm.viridis(norm(range(len(x_data))))
 
@@ -159,13 +159,13 @@ def animate_trajectory(trajectory):
 
 
 if __name__=="__main__":
-    # # 使用例
+    # # example
     origin = (0.5, 0)
     max_distance = (0.3, 0.075)
     # max_distance = (0.3, 0.2)
     angle=np.pi/2
     num_loops = 50
-    loop_duration = 5.0  # 1つの軌道を描く時間 [s]
+    loop_duration = 5.0  # time to draw one trajectory [s]
     delta_time = 0.07
     noise_std=-1
     fx=1
@@ -177,7 +177,7 @@ if __name__=="__main__":
     )
     animate_trajectory(trajectory)
 
-    # # 使用例
+    # # example
     # origin = (0.5, 0)
     # semi_axes = (0.15, 0.15)
     # angle=np.pi/2

@@ -10,14 +10,14 @@ class LIF(nn.Module):
             is_train_tau=True,reset_v=True
         ):
         """
-        :param in_size: currentの入力サイズ
-        :param dt: LIFモデルを差分方程式にしたときの⊿t. 元の入力がスパイク時系列ならもとデータと同じ⊿t. 
-        :param init_tau: 膜電位時定数τの初期値
-        :param threshold: 発火しきい値
-        :param vrest: 静止膜電位. 
-        :paarm reset_mechanism: 発火後の膜電位のリセット方法の指定
-        :param spike_grad: 発火勾配の近似関数
-        :param reset_v: 膜電位vをリセットするか (最終層のvを使うときだけFalseにしても良い)
+        :param in_size: input size of current
+        :param dt: ⊿t when the LIF model is converted to a difference equation. If the input is a spike time series, it is the same as the original data. 
+        :param init_tau: initial value of membrane potential time constant τ
+        :param threshold: threshold for firing
+        :param vrest: resting membrane potential
+        :paarm reset_mechanism: reset method after firing
+        :param spike_grad: approximation function of firing gradient
+        :param reset_v: reset membrane potential v (False only when using the last layer's v)
         """
         super(LIF, self).__init__()
 
@@ -32,34 +32,25 @@ class LIF(nn.Module):
         self.v_peak=self.threshold*3
         self.reset_v=reset_v
 
-        #>> tauを学習可能にするための調整 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        # 参考 [https://github.com/fangwei123456/Parametric-Leaky-Integrate-and-Fire-Spiking-Neuron/blob/main/codes/models.py]
+        #>> adjust tau to be trainable >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        # reference [https://github.com/fangwei123456/Parametric-Leaky-Integrate-and-Fire-Spiking-Neuron/blob/main/codes/models.py]
         self.is_train_tau=is_train_tau
         init_w=-log(1/(self.init_tau-min_tau)-1)
         if is_train_tau:
-            self.w=nn.Parameter(init_w * torch.ones(size=in_size))  # デフォルトの初期化
+            self.w=nn.Parameter(init_w * torch.ones(size=in_size))  # default initialization
         elif not is_train_tau:
-            self.w=(init_w * torch.ones(size=in_size))  # デフォルトの初期化
-        #<< tauを学習可能にするための調整 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            self.w=(init_w * torch.ones(size=in_size))  # default initialization
+        #<< adjust tau to be trainable <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
         self.v=0.0
-        self.r=1.0 #膜抵抗
+        self.r=1.0 #membrane resistance
 
 
     def forward(self,current:torch.Tensor):
         """
-        :param current: シナプス電流 [batch x ...]
+        :param current: synaptic current [batch x ...]
         """
 
-
-        # if torch.max(self.tau)<self.dt: #dt/tauが1を超えないようにする
-        #     dtau=(self.tau<self.dt)*self.dt
-        #     self.tau=self.tau-dtau
-
-        # print(f"tau:{self.tau.shape}, v:{self.v.shape}, current:{current.shape}")
-        # print(self.tau)
-        # print(self.v)
-        # print("--------------")
         device=current.device
 
         if not self.is_train_tau:
@@ -73,16 +64,16 @@ class LIF(nn.Module):
             self.w = self.w.to(device)
 
 
-        tau=self.min_tau+self.w.sigmoid() #tauが小さくなりすぎるとdt/tauが1を超えてしまう
-        dv=self.dt/(tau) * ( -(self.v-self.vrest) + (self.r)*current ) #膜電位vの増分
+        tau=self.min_tau+self.w.sigmoid() #if tau is too small, dt/tau will exceed 1
+        dv=self.dt/(tau) * ( -(self.v-self.vrest) + (self.r)*current ) #increment of membrane potential v
         self.v=self.v+dv
         spike=self.__fire()
 
         if self.reset_v:
-            v_tmp=self.v*(1.0-spike) + self.v_peak*spike #リセット前の膜電位
+            v_tmp=self.v*(1.0-spike) + self.v_peak*spike #membrane potential before reset
             self.__reset_voltage(spike)
         elif not self.reset_v:
-            v_tmp=self.v #リセットしないときはピーク値への書き換えもしない
+            v_tmp=self.v #do not reset the peak value when reset_v is False
 
         if not self.output:
             return spike
@@ -111,7 +102,7 @@ class LIF(nn.Module):
 
 class DynamicLIF(nn.Module):
     """
-    動的にtime constant(TC)が変動するLIF
+    LIF with dynamic time constant
     """
 
     def __init__(
@@ -120,15 +111,15 @@ class DynamicLIF(nn.Module):
             reset_v=True, v_actf=None
         ):
         """
-        :param in_size: currentの入力サイズ
-        :param dt: LIFモデルを差分方程式にしたときの⊿t. 元の入力がスパイク時系列ならもとデータと同じ⊿t. 
-        :param init_tau: 膜電位時定数τの初期値. [[tau1, rate1],[tau2, rate2],...]で指定することでその割合の指定が可能
-        :param threshold: 発火しきい値
-        :param vrest: 静止膜電位. 
-        :paarm reset_mechanism: 発火後の膜電位のリセット方法の指定
-        :param spike_grad: 発火勾配の近似関数
-        :param reset_v: 膜電位vをリセットするか (最終層のvを使うときだけFalseにしても良い)
-        :param v_actf<str>: {None, "relu", "tanh"} 膜電位vの活性化関数 (いい感じに内部状態を調整するために使ってる)
+        :param in_size: input size of current
+        :param dt: ⊿t when the LIF model is converted to a difference equation. If the input is a spike time series, it is the same as the original data. 
+        :param init_tau: initial value of membrane potential time constant τ. [[tau1, rate1],[tau2, rate2],...] can be specified to specify the ratio
+        :param threshold: threshold for firing
+        :param vrest: resting membrane potential. 
+        :paarm reset_mechanism: reset method after firing
+        :param spike_grad: approximation function of firing gradient
+        :param reset_v: reset membrane potential v (False only when using the last layer's v)
+        :param v_actf<str>: {None, "relu", "tanh"} activation function of membrane potential v (used to adjust the internal state)
         """
         super(DynamicLIF, self).__init__()
 
@@ -141,20 +132,20 @@ class DynamicLIF(nn.Module):
         self.spike_grad=spike_grad
         self.output=output
         self.reset_v=reset_v
-        self.v_peak=self.threshold*3.0 #ピーク値はしきい値の3倍位にしとく(正直, 描画用なのでどうでもいい)
+        self.v_peak=self.threshold*3.0 #the peak value is set to 3 times the threshold (it is not important for drawing)
 
-        #>> tauを学習可能にするための調整 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        # 参考 [https://github.com/fangwei123456/Parametric-Leaky-Integrate-and-Fire-Spiking-Neuron/blob/main/codes/models.py]
+        #>> adjust tau to be trainable >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        # reference [https://github.com/fangwei123456/Parametric-Leaky-Integrate-and-Fire-Spiking-Neuron/blob/main/codes/models.py]
         init_w=-log(1/(self.init_tau-min_tau)-1)
-        self.w=nn.Parameter(init_w * torch.ones(size=in_size))  # デフォルトの初期化
-        #<< tauを学習可能にするための調整 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        self.w=nn.Parameter(init_w * torch.ones(size=in_size))  # default initialization
+        #<< adjust tau to be trainable <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
         self.v=0.0
-        self.r=1.0 #膜抵抗
-        self.a=1.0 #タイムスケール
+        self.r=1.0 #membrane resistance
+        self.a=1.0 #time scale
 
-        self.__set_v_actf(v_actf) #膜電位vの活性化関数を設定
+        self.__set_v_actf(v_actf) #set activation function of membrane potential v
 
     def __set_v_actf(self,v_actf):
         if v_actf=="relu":
@@ -167,7 +158,7 @@ class DynamicLIF(nn.Module):
 
     def forward(self,current:torch.Tensor):
         """
-        :param current: シナプス電流 [batch x ...]
+        :param current: synaptic current [batch x ...]
         """
 
 
@@ -182,33 +173,33 @@ class DynamicLIF(nn.Module):
         # if self.wh.weight.device != device:
         #     self.wh=self.wh.to(device)
 
-        tau=self.min_tau+self.w.sigmoid() #tauが小さくなりすぎるとdt/tauが1を超えてしまう
+        tau=self.min_tau+self.w.sigmoid() #if tau is too small, dt/tau will exceed 1
 
         tau_new=tau*self.a
-        tau_new[tau_new<self.min_tau]=self.min_tau #tauが小さくなりすぎるとdt/tauが1を超えてしまうためclippingする
+        tau_new[tau_new<self.min_tau]=self.min_tau #if tau is too small, dt/tau will exceed 1, so clipping
         
-        dv=(self.dt/tau_new) * (-(self.v-self.vrest)) + (self.dt/(tau*self.a)) * (self.a*self.r*current) #内部状態に対するtauのみclipping
+        dv=(self.dt/tau_new) * (-(self.v-self.vrest)) + (self.dt/(tau*self.a)) * (self.a*self.r*current) #clipping only for tau of internal state
        
         self.v=self.v+dv
 
-        if not self.v_actf is None: #活性化関数が設定されているなら適用
+        if not self.v_actf is None: #if the activation function is set, apply it
             self.v=self.v_actf(self.v)
 
         spike=self.__fire() 
 
 
         if self.reset_v: 
-            v_tmp=self.v*(1.0-spike) + self.v_peak*spike #spikeがたった膜電位をピーク値にする(描画用)
+            v_tmp=self.v*(1.0-spike) + self.v_peak*spike #set the peak value of the membrane potential when the spike is fired (for drawing)
             self.__reset_voltage(spike)
         else:
-            v_tmp=self.v #リセットしないときはピーク値への書き換えもしない
+            v_tmp=self.v #if reset_v is False, do not reset the peak value
         
-        self._set_state(current,v_tmp,spike) #状態を記憶 見たいときにオンにする
+        self._set_state(current,v_tmp,spike) #save the state (for visualization and memory usage gets larger)
 
         if not self.output:
             return spike
         else:
-            return spike, (current,v_tmp) #spikeに加えて, (シナプス電流, 膜電位)を返す
+            return spike, (current,v_tmp) #return spike and (synaptic current, membrane potential)
 
 
     def __fire(self)->torch.Tensor:
@@ -226,12 +217,12 @@ class DynamicLIF(nn.Module):
 
 
     def init_voltage(self):
-        self.spike_prev=None #spikeのリセット. ホントは他の関数にしたほうがいい(読みやすいコード的に)
+        self.spike_prev=None #reset spike. it is better to use other functions (for readability)
         self.v=0.0
 
     def _set_state(self,current:torch.Tensor,volt:torch.Tensor,outspike:torch.Tensor):
         """
-        各時刻の各層のデータを保存したいときに使う
+        save the data of each layer at each time step (for visualization and memory usage gets larger)
         """
         self.lif_state={
             "current":current,

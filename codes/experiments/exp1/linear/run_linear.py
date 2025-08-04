@@ -29,7 +29,7 @@ def save_voltage(v_scaled, v_snn, v_dyna, savepath):
     fig,axes=plt.subplots(nrows=2,ncols=1,figsize=(10,5))
     axes[0].plot(v_scaled, label="Base")
     axes[0].legend()
-    axes[1].set_ylim(axes[0].get_ylim())  # ax0のy軸の範囲をax1に設定
+    axes[1].set_ylim(axes[0].get_ylim())  # set y-axis range of ax0 to ax1
     axes[1].plot(v_snn,label="SNN")
     axes[1].plot(v_dyna,label="DynaSNN")
     axes[1].legend()
@@ -45,7 +45,7 @@ def save_tarck_data(
         test_idx, track_batchsize, savepath):
     
 
-        #-- データのパディング ------------------------------------------------------------
+        #-- Padding data ------------------------------------------------------------
         T_base=input_base.shape[0]
         T_scaled=v_scaled.shape[0]
 
@@ -75,7 +75,7 @@ def save_tarck_data(
             v_base=_pad_array(v_base,dT,v_base.shape[1:])
 
 
-        #-- データをcsv形式にして保存 ------------------------------------------------------------
+        #-- Save data as CSV ------------------------------------------------------------
         for i_batch in (range(track_batchsize)):
             track_datapath=savepath/f"model{test_idx}/batch{i_batch}"
             if not os.path.exists(track_datapath):
@@ -116,7 +116,7 @@ def main():
     parser.add_argument("--timescale",type=float,default=3)
     parser.add_argument("--tau",type=float,default=0.008)
     parser.add_argument("--batchsize",type=int,default=1000)
-    parser.add_argument("--track_batchsize",type=int, default=100,help="データをcsvで保存するバッチサイズ")
+    parser.add_argument("--track_batchsize",type=int, default=100,help="Batch size for saving data as CSV")
     parser.add_argument("--device",default=0)
     args=parser.parse_args()
 
@@ -131,18 +131,18 @@ def main():
         os.makedirs(track_datapath)
 
     device=torch.device(f"cuda:{args.device}" if torch.cuda.is_available() else "cpu")
-    config=load_yaml(PARENT/"config.yml") #DynaSNNの設定
-    config["model"]["init-tau"]=float(args.tau) #時定数を変える
+    config=load_yaml(PARENT/"config.yml") # DynaSNN settings
+    config["model"]["init-tau"]=float(args.tau) # Change time constant
     print_terminal(f"running processing [timescale: {args.timescale:.2f}]...")
 
     
     result_trajectory=[]
     mse_table=[]
     for i_test in tqdm(range(args.testnums)):
-        model=DynamicSNN(conf=config["model"]).to(device) # テストエポックごとにモデルを初期化する. なぜなら未学習のモデルの出力は初期重みに死ぬほど依存するから
+        model=DynamicSNN(conf=config["model"]).to(device) # Re-initialize the model for each test epoch. This is because the output of an untrained model heavily depends on the initial weights.
 
         T=300
-        batch=args.batchsize #バッチよりもモデルの初期値に依存する
+        batch=args.batchsize # Depends more on the initial value of the model than the batch
         insize=config["model"]["in-size"]
 
         p=0.1
@@ -161,8 +161,8 @@ def main():
                 if scaled_index < scaled_input.shape[0]:
                     scaled_input[scaled_index] = base_input[t]
         else:
-            # 畳み込みを行う処理
-            kernel_size = math.ceil(1 / a)  # カーネルサイズを設定
+            # process of 1D convolution in the time direction
+            kernel_size = math.ceil(1 / a)  # set kernel size
             
             # print(f"base_input.shape: {base_input.shape}")
             scaled_input=torch.Tensor([]).to(base_input.device)
@@ -181,27 +181,27 @@ def main():
         scaled_s,scaled_i,scaled_v=model.dynamic_forward_v1(scaled_input,a=torch.Tensor([a for _ in range(scaled_input.shape[0])]))
         
         
-        v1_resampled=F.interpolate(base_v.permute(1,2,0), size=int(a*T), mode='linear', align_corners=False).permute(-1,0,1) #基準膜電位のタイムスケール(線形補間)
+        v1_resampled=F.interpolate(base_v.permute(1,2,0), size=int(a*T), mode='linear', align_corners=False).permute(-1,0,1) # Time scale of reference membrane potential (linear interpolation)
         
         scaled_T=scaled_input.shape[0]
 
-        mse_snn_arr=np.mean((v1_resampled.to("cpu").detach().numpy()[:scaled_T]-org_v.to("cpu").detach().numpy())**2,axis=0) #時間方向に平均をとる
+        mse_snn_arr=np.mean((v1_resampled.to("cpu").detach().numpy()[:scaled_T]-org_v.to("cpu").detach().numpy())**2,axis=0) # Average over time
         mse_snn=  np.mean(mse_snn_arr) 
         mse_dyna_arr=np.mean((v1_resampled.to("cpu").detach().numpy()[:scaled_T]-scaled_v.to("cpu").detach().numpy())**2,axis=0)
         mse_dyna= np.mean(mse_dyna_arr) 
         result_trajectory.append((mse_snn,mse_dyna))
 
         mse_table+=np.concatenate([
-            np.ones(shape=(track_batchsize,1))*i_test, #モデル番号
-            np.arange(track_batchsize).reshape(-1,1), #バッチ番号
-            mse_snn_arr[:track_batchsize].mean(axis=-1).reshape(-1,1), #SNNのMSE
-            mse_dyna_arr[:track_batchsize].mean(axis=-1).reshape(-1,1), #DynaSNNのMSE
+            np.ones(shape=(track_batchsize,1))*i_test, # Model number
+            np.arange(track_batchsize).reshape(-1,1), # Batch number
+            mse_snn_arr[:track_batchsize].mean(axis=-1).reshape(-1,1), # MSE of SNN
+            mse_dyna_arr[:track_batchsize].mean(axis=-1).reshape(-1,1), # MSE of DynaSNN
         ],axis=1).tolist()
         mse_table_pd=pd.DataFrame(mse_table,columns=["model idx","batch idx","mse_snn","mse_dyna"])
         mse_table_pd.to_csv(track_datapath/f"mse_table.csv",index=False)
         
 
-        # データをトラッキング
+        # Track data
         save_tarck_data(
             timesteps=torch.arange(0,scaled_v.shape[0]).cpu().numpy(),
             input_base=base_input.to("cpu").detach().numpy(),
@@ -233,7 +233,7 @@ def main():
     }
 
 
-    # 引数をjsonに保存
+    # Save arguments as json
     args_dict=vars(args)
     json.dump(args_dict,open(result_path/"args.json",'w'),indent=4)
 

@@ -56,13 +56,13 @@ def plot_and_save_curves(result, resultpath, epoch):
 def custom_collate_fn(batch):
     inputs, targets = zip(*batch)
     
-    # numpy.ndarrayをTensorに変換
+    # convert numpy.ndarray to Tensor
     inputs = [torch.tensor(input) for input in inputs]
     
-    # パディングを使用してテンソルのサイズを揃える
+    # pad the tensor to the same size
     inputs_padded = pad_sequence(inputs, batch_first=True)
     
-    # targetsは整数のリストなので、そのままテンソルに変換
+    # targets is a list of integers, so convert it to a tensor
     targets_tensor = torch.tensor(targets)
     
     return inputs_padded, targets_tensor
@@ -71,12 +71,12 @@ def custom_collate_fn(batch):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--target', type=str,help="configのあるパス")
-    parser.add_argument("--device",default=0,help="GPUの番号")
+    parser.add_argument('--target', type=str,help="path to config")
+    parser.add_argument("--device",default=0,help="GPU number")
     args = parser.parse_args()
 
 
-    #>> configの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> config preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     device=torch.device(f"cuda:{args.device}") if torch.cuda.is_available() else torch.device("cpu")
     resultpath=Path(args.target)/"result"
     if not os.path.exists(resultpath):
@@ -91,11 +91,11 @@ def main():
     minibatch=train_conf["batch"]
     base_timewindow=train_conf["timewindow"]
     base_sequence=train_conf["sequence"]
-    #<< configの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< config preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-    #>> モデルの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> model preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     if model_conf["type"]=="dynamic-snn".casefold():
         if "res".casefold() in model_conf["cnn-type"]:
             model=DynamicResCSNN(model_conf)
@@ -117,33 +117,33 @@ def main():
     model.to(device)
 
     weight_decay=train_conf["weight-decay"] if "weight-decay" in train_conf else 0.0
-    model_params=model.split_weight_decay_params( #正則化をかけるパラメータとかけないパラメータを分ける
-        no_decay_param_names=["w","bias"], #wは時定数の逆数
+    model_params=model.split_weight_decay_params( #split parameters for weight decay and no weight decay
+        no_decay_param_names=["w","bias"], #w is the inverse of the time constant
         weight_decay=weight_decay
     )
 
     optim_type=train_conf["optim"] if "optim" in train_conf else "Adam"
     if optim_type=="Adam":
         optim=torch.optim.Adam(model_params,lr=train_conf["lr"])
-    elif optim_type=="AdamW": #weight decayを利用する場合は, weight decayを正しく実装したAdamWを使う
+    elif optim_type=="AdamW": #use AdamW with weight decay
         optim=torch.optim.AdamW(model_params,lr=train_conf["lr"])
 
 
     if train_conf["schedule-step"]>0:   
         scheduler=StepLR(optimizer=optim,step_size=train_conf["schedule-step"],gamma=train_conf["schedule-rate"])
-    #<< モデルの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< model preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
 
-    #>> データの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> data preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     train_loaders=[]
     test_loaders=[]
     for timescale in train_conf["timescales"]:
         time_window=round(base_timewindow/timescale)
         if model_conf["in-size"]==128:
             transform=torchvision.transforms.Compose([
-                tonic.transforms.Denoise(filter_time=10000), #denoiseって結構時間かかる??
+                tonic.transforms.Denoise(filter_time=10000), #denoise takes a long time??
                 tonic.transforms.ToFrame(sensor_size=tonic.datasets.DVSGesture.sensor_size,time_window=time_window),
                 torch.from_numpy,
             ])
@@ -171,12 +171,12 @@ def main():
             "timescale":timescale,
             "loader":DataLoader(testset,   batch_size=minibatch, shuffle=False,collate_fn=custom_collate_fn,num_workers=1),
         })
-    iter_n_train=len(train_loaders[0]["loader"]) #イテレーションの最大数
+    iter_n_train=len(train_loaders[0]["loader"]) #maximum number of iterations
     iter_n_test =len( test_loaders[0]["loader"])
-    #<< データの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< data preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
-    #>> 学習ループ >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> training loop >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     result=[]
     best_score={"mean":0.0, "std":0.0}
     for e in range(epoch):
@@ -198,8 +198,8 @@ def main():
                 inputs, targets = inputs.to(device).permute((1,0,*[i+2 for i in range(inputs.ndim-2)])).to(torch.float), targets.to(device)
                 inputs[inputs>0]=1.0
 
-                sequence=round(base_sequence*ts) #timescaleに合わせてsequenceを調整
-                if sequence>0 and inputs.shape[0]>sequence: #configでシーケンスが指定された場合はその長さに切り取る
+                sequence=round(base_sequence*ts) #adjust sequence to timescale
+                if sequence>0 and inputs.shape[0]>sequence: #if sequence is specified in config, cut to that length
                     inputs=inputs[:sequence]
 
                 # print(f"timescale:{ts}, in shape:{inputs.shape}")
@@ -209,7 +209,7 @@ def main():
                 targets=targets.to(torch.long)
                 loss:torch.Tensor = criterion(outputs, targets)
                 loss.backward()
-                model.clip_gradients() #勾配クリッピング
+                model.clip_gradients() #gradient clipping
                 optim.step()
                 optim.zero_grad()
                 iter_loss+=loss.item()
@@ -227,7 +227,7 @@ def main():
                 break
             
         if train_conf["schedule-step"]>0:   
-            scheduler.step() #学習率の更新
+            scheduler.step() #update learning rate
 
         # Validation step
         model.eval()
@@ -245,8 +245,8 @@ def main():
                     inputs, targets = inputs.to(device).permute((1,0,*[i+2 for i in range(inputs.ndim-2)])).to(torch.float), targets.to(device)
                     inputs[inputs>0]=1.0
 
-                    sequence=round(base_sequence*ts) #timescaleに合わせてsequenceを調整
-                    if sequence>0 and inputs.shape[0]>sequence: #configでシーケンスが指定された場合はその長さに切り取る
+                    sequence=round(base_sequence*ts) #adjust sequence to timescale
+                    if sequence>0 and inputs.shape[0]>sequence: #if sequence is specified in config, cut to that length
                         inputs=inputs[:sequence]
                     
                     outputs = model(inputs)
@@ -264,7 +264,7 @@ def main():
                     break
 
             acc_mean,acc_std=np.mean(test_acc_list),np.std(test_acc_list)
-            if acc_mean>best_score["mean"]: #テスト最高スコアのモデルを保存
+            if acc_mean>best_score["mean"]: #save the model with the highest test score
                 best_score["mean"]=acc_mean
                 best_score["std"]=acc_std
                 best_score["epoch"]=e
@@ -293,7 +293,7 @@ def main():
         # Plot and save curves
         plot_and_save_curves(result, resultpath, e + 1)
     torch.save(model.state_dict(), resultpath / f"model_final.pth")
-    #<< 学習ループ <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<   
+    #<< training loop <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<   
 
 
 if __name__=="__main__":

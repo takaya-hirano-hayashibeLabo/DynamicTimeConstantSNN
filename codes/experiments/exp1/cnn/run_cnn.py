@@ -54,7 +54,7 @@ def save_tarck_data(
         s_dyna, i_dyna, v_dyna,
         test_idx, track_batchsize, savepath):
 
-        #-- データのパディング ------------------------------------------------------------
+        #-- Padding data ------------------------------------------------------------
         T_base=input_base.shape[0]
         T_scaled=v_scaled.shape[0]
 
@@ -85,7 +85,7 @@ def save_tarck_data(
 
 
         
-        #-- データをcsv形式にして保存 ------------------------------------------------------------
+        #-- Save data as CSV ------------------------------------------------------------
         for i_batch in (range(track_batchsize)):
             track_datapath=savepath/f"model{test_idx}/batch{i_batch}"
             if not os.path.exists(track_datapath):
@@ -143,17 +143,17 @@ def plot_and_save_inputs(base_input:torch.Tensor, scaled_input:torch.Tensor, sav
 
 def memory_batchnrm_params(model:nn.Module, in_size, in_channel,T, p, minibatchsize, epoch, device):
     """
-    BatchNorm構造を持つモデルに学習データを流す. これによって平均と分散を記憶させる
-    :param model: モデル
-    :param in_size: 入力サイズ
-    :param in_channel: 入力チャンネル数
-    :param T: 時間ステップ数
-    :param p: スパイク確率
-    :param minibatchsize: ミニバッチサイズ
-    :param epoch: エポック数
+    Feed training data to a model with BatchNorm structure. This memorizes the mean and variance.
+    :param model: Model
+    :param in_size: Input size
+    :param in_channel: Number of input channels
+    :param T: Number of time steps
+    :param p: Spike probability
+    :param minibatchsize: Mini-batch size
+    :param epoch: Number of epochs
     """
 
-    model.train() #trainモードにしてbatchnrmのパラメータを更新させる
+    model.train() # Set to train mode to update batchnorm parameters
     for e in range(epoch):
         spikes=torch.where(
             torch.rand(size=(T, minibatchsize, in_channel,in_size,in_size))<p,1.0,0.0
@@ -163,8 +163,8 @@ def memory_batchnrm_params(model:nn.Module, in_size, in_channel,T, p, minibatchs
 
 def debug_batchnorm_params(model: nn.Module):
     """
-    モデル内のBatchNorm層の平均（μ）と分散（σ）をデバッグする関数
-    :param model: PyTorchのモデル
+    Function to debug the mean (μ) and variance (σ) of BatchNorm layers in the model
+    :param model: PyTorch model
     """
     for name, layer in model.named_modules():
         if isinstance(layer, nn.BatchNorm2d) or isinstance(layer, nn.BatchNorm1d):
@@ -181,7 +181,7 @@ def main():
     parser.add_argument("--timescale",type=float,default=1.0)
     parser.add_argument("--tau",type=float,default=0.008)
     parser.add_argument("--batchsize",type=int,default=10)
-    parser.add_argument("--track_batchsize",type=int, default=5,help="データをcsvで保存するバッチサイズ")
+    parser.add_argument("--track_batchsize",type=int, default=5,help="Batch size for saving data as CSV")
     parser.add_argument("--device",default=0)
     parser.add_argument("--modeltype",default="csnn",help="csnn, csnn_dropout, rescsnn")
     # parser.add_argument("--saveto",default="")
@@ -199,7 +199,7 @@ def main():
         os.makedirs(track_datapath)
 
     device=torch.device(f"cuda:{args.device}" if torch.cuda.is_available() else "cpu")
-    config=load_yaml(str(PARENT/f"configs/{args.modeltype}.yml")) #DynaSNNの設定
+    config=load_yaml(str(PARENT/f"configs/{args.modeltype}.yml")) # DynaSNN settings
     print_terminal(f"running processing [timescale: {args.timescale:.2f}]...")
 
     
@@ -208,24 +208,24 @@ def main():
     for i_test in tqdm(range(args.testnums)):
 
         if "cnn-type" in config["model"] and config["model"]["cnn-type"]=="res":
-            model=DynamicResCSNN(conf=config["model"]).to(device) # テストエポックごとにモデルを初期化する. なぜなら未学習のモデルの出力は初期重みに死ぬほど依存するから
+            model=DynamicResCSNN(conf=config["model"]).to(device) # Re-initialize the model for each test epoch. This is because the output of an untrained model heavily depends on the initial weights.
         else:
-            model=DynamicCSNN(conf=config["model"]).to(device) # テストエポックごとにモデルを初期化する. なぜなら未学習のモデルの出力は初期重みに死ぬほど依存するから
+            model=DynamicCSNN(conf=config["model"]).to(device) # Re-initialize the model for each test epoch. This is because the output of an untrained model heavily depends on the initial weights.
         
         T=300
-        batch=args.batchsize #バッチよりもモデルの初期値に依存する
+        batch=args.batchsize # Depends more on the initial value of the model than the batch
         insize=config["model"]["in-size"]
         in_channel=config["model"]["in-channel"]
         minibatch=50 if batch>50 else batch
-        p=0.1 #スパイク確率
+        p=0.1 # Spike probability
 
 
-        if config["model"]["is-bn"]: #BatchNorm構造を持つモデルの場合はパラメータを記憶させる
+        if config["model"]["is-bn"]: # If the model has a BatchNorm structure, memorize the parameters
             memory_batchnrm_params(
                 model, config["model"]["in-size"], config["model"]["in-channel"], 
                 T, p, minibatch, 10, device
             )
-        model.eval() #モデルを評価モードにする
+        model.eval() # Set the model to evaluation mode
 
 
         squared_error_lif_minibatch=[]
@@ -246,8 +246,8 @@ def main():
                     if scaled_index < scaled_input.shape[0]:
                         scaled_input[scaled_index] = base_input[t]
             else:
-                # 1次元の畳み込みを時間方向に行う処理
-                kernel_size = math.ceil(1 / a)  # カーネルサイズを設定
+                # process of 1D convolution in the time direction
+                kernel_size = math.ceil(1 / a)  # set kernel size
                 
                 # Permute base_input to bring the time dimension to the last position
                 base_input_1d = base_input.permute(1, 2, 3, 4, 0)  # (batch, channel, w, h, T)
@@ -272,26 +272,26 @@ def main():
             scaled_s,scaled_i,scaled_v=model.dynamic_forward_v1(scaled_input,a=torch.Tensor([a for _ in range(scaled_input.shape[0])]))
             
             
-            v1_resampled=F.interpolate(base_v.permute(1,2,0), size=int(a*T), mode='linear', align_corners=False).permute(-1,0,1) #基準膜電位のタイムスケール(線形補間)
+            v1_resampled=F.interpolate(base_v.permute(1,2,0), size=int(a*T), mode='linear', align_corners=False).permute(-1,0,1) # Time scale of reference membrane potential (linear interpolation)
             
             scaled_T=scaled_input.shape[0]
             squared_error_lif_minibatch+=list(v1_resampled.to("cpu").detach().numpy()[:scaled_T]-org_v.to("cpu").detach().numpy())
             squared_error_dyna_minibatch+=list(v1_resampled.to("cpu").detach().numpy()[:scaled_T]-scaled_v.to("cpu").detach().numpy())
 
 
-            #-- trackするデータを保存 ------------------------------------------------------------
-            mse_snn_arr=np.mean((v1_resampled.to("cpu").detach().numpy()[:scaled_T]-org_v.to("cpu").detach().numpy())**2,axis=0) #時間方向に平均をとる
+            #-- Save tracked data ------------------------------------------------------------
+            mse_snn_arr=np.mean((v1_resampled.to("cpu").detach().numpy()[:scaled_T]-org_v.to("cpu").detach().numpy())**2,axis=0) # Average over time
             mse_dyna_arr=np.mean((v1_resampled.to("cpu").detach().numpy()[:scaled_T]-scaled_v.to("cpu").detach().numpy())**2,axis=0)
             mse_table+=np.concatenate([
-                np.ones(shape=(track_batchsize,1))*i_test, #モデル番号
-                np.arange(track_batchsize).reshape(-1,1), #バッチ番号
-                mse_snn_arr.mean(axis=-1)[:track_batchsize].reshape(-1,1), #SNNのMSE
-                mse_dyna_arr.mean(axis=-1)[:track_batchsize].reshape(-1,1), #DynaSNNのMSE
+                np.ones(shape=(track_batchsize,1))*i_test, # model index
+                np.arange(track_batchsize).reshape(-1,1), # batch index
+                mse_snn_arr.mean(axis=-1)[:track_batchsize].reshape(-1,1), # MSE of SNN
+                mse_dyna_arr.mean(axis=-1)[:track_batchsize].reshape(-1,1), # MSE of DynaSNN
             ],axis=1).tolist()
             mse_table_pd=pd.DataFrame(mse_table,columns=["model idx","batch idx","mse_snn","mse_dyna"])
             mse_table_pd.to_csv(track_datapath/f"mse_table.csv",index=False)
             
-            if i_minibatch==0: #最初のバッチだけトラックする
+            if i_minibatch==0: # Only track the first batch
                 save_tarck_data(
                     timesteps=np.arange(0,scaled_v.shape[0]),
                     input_base=base_input.to("cpu").detach().numpy(),
@@ -310,7 +310,7 @@ def main():
                     track_batchsize=track_batchsize,
                     savepath=track_datapath
                 )
-            #-- trackするデータを保存 ------------------------------------------------------------
+            #-- Save tracked data ------------------------------------------------------------
 
         mse_lif=np.mean(np.array(squared_error_lif_minibatch)**2)
         mse_dyna=np.mean(np.array(squared_error_dyna_minibatch)**2)

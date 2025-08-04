@@ -1,14 +1,14 @@
 train:
   batch: 64
   epoch: 200
-  iter: -1 #ここは-1にするとmaxまで. コードテストのときは2くらいで試す
+  iter: -1 #if -1, train until max. for testing, set to 2
   lr: 0.001
-  save_interval: 100 #epochごと
+  save_interval: 100 #every epoch
   datatype: ur5e
-  datapath: original-data/Trajectory/datasets.csv #ROOT以下の相対パスを指定
-  sequence: 50 #シーケンスは制限する
-  timescales: [1.0] #dynaは1倍のみ学習
-  schedule-step: -1 #-1でscheduleなし
+  datapath: original-data/Trajectory/datasets.csv #relative path below ROOT
+  sequence: 50 #limit the sequence
+  timescales: [1.0] #only learn 1x
+  schedule-step: -1 #if -1, no schedule
   schedule-rate: 0.5
 
 model:
@@ -17,22 +17,22 @@ model:
   in-size: 1200
   hiddens: [512,128,64]
   out-size: &out_size 12
-  clip-norm: &clip_norm 1.0 #勾配クリッピングの最大勾配. 一般的に1.0が使われる
+  clip-norm: &clip_norm 1.0 #maximum gradient for gradient clipping. usually 1.0
   dropout: &dropout 0.2
 
   dt: 0.03 #s
-  init-tau: 0.6 #95%過去のstepを残す
+  init-tau: 0.6 #keep 95% of the past steps
   min-tau: 0.03
-  train-tau: true #時定数tauを学習
+  train-tau: true #learn tau
   v-threshold: 0.1
   v-rest: 0.0
   reset-mechanism: zero
   spike-grad: fast-sigmoid
-  output-membrane: true #膜電位を予測に使うからtrue
-  reset-outmem: false #最終層のDynaLifはリセットしない
+  output-membrane: true #use membrane potential for prediction
+  reset-outmem: false #do not reset the last layer of DynaLif
   
 
-output-model: #連続値予測用モデル
+output-model: #continuous value prediction model
   out-type: velocity
   in-size: *out_size
   hiddens: [16,16,16]
@@ -43,7 +43,7 @@ output-model: #連続値予測用モデル
 
 
 encoder:
-  type: THR #Thresoldモデル
-  resolution: 200 #しきい値の分解能
+  type: THR #Threshold model
+  resolution: 200 #resolution of threshold
   thr-max: 1.1
   thr-min: -1.1
