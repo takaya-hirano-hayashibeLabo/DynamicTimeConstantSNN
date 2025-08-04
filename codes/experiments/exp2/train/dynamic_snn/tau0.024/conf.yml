@@ -1,46 +1,46 @@
 train:
   batch: 32
   epoch: 800
-  iter: -1 #ここは-1にするとmaxまで. とりあえず20くらいでいい
+  iter: -1 #if -1, train until max
   lr: 0.0008
-  save_interval: 200 #epochごと
+  save_interval: 200 #every epoch
   datatype: gesture
   timewindow: 3000 #μs (=3ms =0.003s)
-  sequence: 300 #シーケンスは制限する
-  timescales: [1.0] #dynaは1倍のみ学習
-  schedule-step: -1 #-1でscheduleなし
+  sequence: 300 #limit the sequence
+  timescales: [1.0] #only learn 1x
+  schedule-step: -1 #if -1, no schedule
   schedule-rate: 0.5
 
-  optim: AdamW #weight decayを正しく実装したAdamWを使う
-  weight-decay: 0.01 #L2正則化
+  optim: AdamW #use AdamW with weight decay
+  weight-decay: 0.01 #L2 regularization
 
 model:
   type: dynamic-snn
-  cnn-type: res #resで残差ブロックCNNになる
+  cnn-type: res #res for residual block CNN
   res-actfn: dyna-snn
 
   in-size: 32
   in-channel: 2 
   out-size: 11
   hiddens: [12,32] 
-  pool-type: avg # avgにすることで,速度落としたときの1stepの情報量が落ちるようになる
+  pool-type: avg # avg to reduce information per step when speed is reduced
   pool-size: [2,2]
-  residual-block: [1,1] #2にするとresidual blockあたり1+2層のCNNが積まれる
-  is-bn: false #batch normalizationするかどうか. 
-  clip-norm: 1.0 #勾配クリッピングの最大勾配. 一般的に1.0が使われる
+  residual-block: [1,1] #2 for 1+2 layers of CNN per residual block
+  is-bn: false #whether to use batch normalization
+  clip-norm: 1.0 #maximum gradient for gradient clipping. usually 1.0
 
   linear-hidden: 512
 
   dropout: 0.5
 
   dt: &dt 0.006 #s
-  init-tau: 0.024 #50%記憶
+  init-tau: 0.024 #50% memory
   min-tau: *dt
-  v-threshold: 0.1 #閾値を1にしてデカくする
+  v-threshold: 0.1 #threshold to make it big
   v-rest: 0.0
   reset-mechanism: zero
   spike-grad: fast-sigmoid
   output-membrane: false
-  r: 1 #膜抵抗. これで入力がスケールされる(dtが小さいと入力が小さくなるのでその補正)
+  r: 1 #membrane resistance. this scales the input (input becomes smaller when dt is smaller)
   
   memory-lifstate: false

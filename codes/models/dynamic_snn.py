@@ -10,7 +10,7 @@ from .lif_model import DynamicLIF
 
 class DynamicSNN(nn.Module):
     """
-    time constant(TC)が動的に変動するSNN
+    SNN with dynamic time constant(TC)
     """
 
     def __init__(self,conf:dict):
@@ -21,7 +21,7 @@ class DynamicSNN(nn.Module):
         self.out_size = conf["out-size"]
         self.clip_norm=conf["clip-norm"] if "clip-norm" in conf.keys() else 1.0
         self.dropout=conf["dropout"]
-        self.output_mem=conf["output-membrane"] #forwardのreturnをspikeだけかmembraneも返すか
+        self.output_mem=conf["output-membrane"] #return spike only or membrane potential
 
         self.dt = conf["dt"]
         self.init_tau = conf["init-tau"]
@@ -32,17 +32,17 @@ class DynamicSNN(nn.Module):
         if "fast".casefold() in conf["spike-grad"] and "sigmoid".casefold() in conf["spike-grad"]: 
             self.spike_grad = surrogate.fast_sigmoid()
 
-        self.reset_outv=True #最終出力層のLIFの膜電位をリセットするか否か. 生成モデルのときにFalseにする
+        self.reset_outv=True #reset membrane potential of last layer LIF. False for generative model
         if "reset-outmem" in conf.keys():
             self.reset_outv=conf["reset-outmem"]
 
-        self.v_actf=conf["v-actf"] if "v-actf" in conf.keys() else None #これは入力スパイク数が速度変化によって変わるときに使う
+        self.v_actf=conf["v-actf"] if "v-actf" in conf.keys() else None #this is used when the number of input spikes changes with speed change
 
 
         modules=[]
-        is_bias=False #biasはつけちゃダメ. ラプラス変換の式が成り立たなくなる.
+        is_bias=False #bias is not allowed. the equation of Laplace transform does not hold
 
-        #>> 入力層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> input layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[
             nn.Linear(self.in_size, self.hiddens[0],bias=is_bias),
             DynamicLIF(
@@ -54,9 +54,9 @@ class DynamicSNN(nn.Module):
             ),
             nn.Dropout(self.dropout),
         ]
-        #<< 入力層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< input layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-        #>> 中間層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> middle layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         prev_hidden=self.hiddens[0]
         for hidden in self.hiddens[1:]:
             modules+=[
@@ -71,9 +71,9 @@ class DynamicSNN(nn.Module):
                 nn.Dropout(self.dropout),
             ]
             prev_hidden=hidden
-        #<< 中間層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< middle layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-        #>> 出力層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> output layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[
             nn.Linear(self.hiddens[-1], self.out_size,bias=is_bias),
             DynamicLIF(
@@ -84,7 +84,7 @@ class DynamicSNN(nn.Module):
                 reset_v=self.reset_outv,v_actf=self.v_actf
             ),
         ]
-        #<< 出力層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< output layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
         self.model=nn.Sequential(*modules)
 
@@ -97,11 +97,11 @@ class DynamicSNN(nn.Module):
 
     def __set_dynamic_params(self,a):
         """
-        LIFの時定数&膜抵抗を変動させる関数
-        :param a: [スカラ]その瞬間の時間スケール
+        function to change LIF time constant & membrane resistance
+        :param a: [scalar] current time scale
         """
         for idx,layer in enumerate(self.model):
-            if isinstance(layer,DynamicLIF):  #ラプラス変換によると時間スケールをかけると上手く行くはず
+            if isinstance(layer,DynamicLIF):  #by Laplace transform, multiplying time scale works well
                 layer.a = a
             elif  isinstance(layer,ResidualDynaLIFBlock):
                 layer.set_dynamic_params(a)
@@ -117,7 +117,7 @@ class DynamicSNN(nn.Module):
 
     def get_tau(self):
         """
-        tauを取得するだけ
+        get tau
         :return <dict>tau: {layer-name: tau}
         """
 
@@ -147,7 +147,7 @@ class DynamicSNN(nn.Module):
 
     def forward(self,s:torch.Tensor):
         """
-        :param s: スパイク列 [T x batch x ...]
+        :param s: spike sequence [T x batch x ...]
         :return out_s: [T x batch x ...]
         :return out_i: [T x batch x ...]
         :return out_v: [T x batch x ...]
@@ -180,12 +180,12 @@ class DynamicSNN(nn.Module):
 
     def dynamic_forward(self,s:torch.Tensor, scale_predictor:ScalePredictor):
         """
-        時間スケールが未知のときのdynamic_forward
-        :param s: スパイク列 [T x batch x ...]
+        dynamic_forward when time scale is unknown
+        :param s: spike sequence [T x batch x ...]
         :return out_s: [T x batch x ...]
         :return out_v: [T x batch x ...]
         """
-        self.model.eval() #絶対学習しない
+        self.model.eval() #do not learn
 
         T=s.shape[0]
         self.__init_lif()
@@ -194,7 +194,7 @@ class DynamicSNN(nn.Module):
         for t in (range(T)):
 
             with torch.no_grad():
-                a=scale_predictor.predict_scale(s[t]) #現在のscaleを予測
+                a=scale_predictor.predict_scale(s[t]) #predict current scale
                 # print(f"time step: {t}, predicted scale: {a}")
                 self.__set_dynamic_params(a)
                 st, (it,vt)=self.model(s[t])
@@ -220,13 +220,13 @@ class DynamicSNN(nn.Module):
 
     def dynamic_forward_v1(self,s:torch.Tensor,a:torch.Tensor):
         """
-        時間スケールが既知のときのdynamic_forward
-        :param s: スパイク列 [T x batch x ...]
-        :param a: 時間スケールリスト [T] バッチ間で時間スケールは統一する
+        dynamic_forward when time scale is known
+        :param s: spike sequence [T x batch x ...]
+        :param a: time scale list [T] time scale is unified between batches
         :return out_s: [T x batch x ...]
         :return out_v: [T x batch x ...]
         """
-        self.model.eval() #絶対学習しない
+        self.model.eval() #do not learn
 
         T=s.shape[0]
         self.__init_lif()
@@ -257,16 +257,16 @@ class DynamicSNN(nn.Module):
 
     def dynamic_forward_v1_with_lifstate(self,s:torch.Tensor,a:torch.Tensor):
         """
-        全LIFモデルのcurrent, volt, outspikeも取得する
-        時間スケールが既知のときのdynamic_forward
-        :param s: スパイク列 [T x batch x ...]
-        :param a: 時間スケールリスト [T] バッチ間で時間スケールは統一する
+        get current, volt, outspike of all LIF models
+        dynamic_forward when time scale is known
+        :param s: spike sequence [T x batch x ...]
+        :param a: time scale list [T] time scale is unified between batches
         :return lif_states<dict>: {lay1:{current,volt,outspike},lay2...}
         """
         lif_states={}
 
 
-        self.model.eval() #絶対学習しない
+        self.model.eval() #do not learn
 
         T=s.shape[0]
         self.__init_lif()
@@ -286,7 +286,7 @@ class DynamicSNN(nn.Module):
     
     def _lifstate_collection(self,lif_states:dict):
         """
-        毎時刻ごとのlifstateをスタックしていく
+        stack lifstate for each time step
         """
 
         def _init_lifstates(layer_keys,states_keys):
@@ -299,7 +299,7 @@ class DynamicSNN(nn.Module):
         
         def _get_lifstate():
             """
-            その時刻の全lifレイヤのsatateを取得
+            get all lif layer states at current time step
             """
             lif_states={}
             for idx,lay in enumerate(self.model):
@@ -334,14 +334,14 @@ class DynamicSNN(nn.Module):
 
     def __test_set_dynamic_param_list(self,a:list):
         """
-        LIFの時定数&膜抵抗を変動させる関数
-        :param a: [スカラ]その瞬間の時間スケール
+        function to change LIF time constant & membrane resistance
+        :param a: [scalar] current time scale
         """
         from copy import deepcopy
 
         a_list_tmp=deepcopy(a)
         for idx,layer in enumerate(self.model):
-            if isinstance(layer,DynamicLIF):  #ラプラス変換によると時間スケールをかけると上手く行くはず
+            if isinstance(layer,DynamicLIF):  #by Laplace transform, multiplying time scale works well
                 layer.a = a_list_tmp.pop(0)
             elif  isinstance(layer,ResidualDynaLIFBlock):
                 a_list_tmp=deepcopy(layer.test_set_dynamic_param_list(a_list_tmp))
@@ -351,7 +351,7 @@ class DynamicSNN(nn.Module):
         lif_states={}
 
 
-        self.model.eval() #絶対学習しない
+        self.model.eval() #do not learn
 
         T=s.shape[0]
         self.__init_lif()
@@ -359,7 +359,7 @@ class DynamicSNN(nn.Module):
         for t in range(T):
 
             with torch.no_grad():
-                self.__test_set_dynamic_param_list(a) #層ごとにスケールを変える
+                self.__test_set_dynamic_param_list(a) #change time scale for each layer
                 st, (it,vt)=self.model(s[t])
                 lif_states=self._lifstate_collection(lif_states)
 
@@ -372,13 +372,13 @@ class DynamicSNN(nn.Module):
 
     def dynamic_forward_genseq(self,s:torch.Tensor,a:float,head_idx:int):
         """
-        時間スケールが既知のときのdynamic_forward
-        :param s: スパイク列 [T x batch x ...]
-        :param a: 時間スケールリスト
+        dynamic_forward when time scale is known
+        :param s: spike sequence [T x batch x ...]
+        :param a: time scale list
         :return out_s: [T x batch x ...]
         :return out_v: [T x batch x ...]
         """
-        self.model.eval() #絶対学習しない
+        self.model.eval() #do not learn
 
         T=s.shape[0]
         self.__init_lif()
@@ -410,8 +410,8 @@ class DynamicSNN(nn.Module):
 
     def split_weight_decay_params(self, no_decay_param_names:list=["w","bias"], weight_decay:float=0.01):
         """
-        weight decayを適用するパラメータと適用しないパラメータを分ける  
-        L2正則化は基本的に重みのみ (biasや時定数には適用しない)
+        split parameters to apply weight decay and do not apply weight decay
+        L2 regularization is basically applied to weights (bias and time constant are not applied)
         """
         decay_params=[]
         no_decay_params=[]
@@ -443,25 +443,25 @@ def create_csnn_block(
         lif_dt,lif_init_tau,lif_min_tau,lif_threshold,lif_vrest,lif_reset_mechanism,lif_spike_grad,lif_output,
         ):
     """
-    param: in_size: 幅と高さ (正方形とする)
+    param: in_size: width and height (square)
     param: in_channel: channel size
-    param: out_channel: 出力チャネルのサイズ
-    param: kernel: カーネルサイズ
-    param: stride: ストライドのサイズ
-    param: padding: パディングのサイズ
-    param: is_bias: バイアスを使用するかどうか
-    param: is_bn: バッチ正規化を使用するかどうか
-    param: pool_type: プーリングの種類 ("avg"または"max")
-    param: pool_size: プールのサイズ
+    param: out_channel: output channel size
+    param: kernel: kernel size
+    param: stride: stride size
+    param: padding: padding size
+    param: is_bias: whether to use bias
+    param: is_bn: whether to use batch normalization
+    param: pool_type: pooling type ("avg" or "max")
+    param: pool_size: pool size
     param: dropout: dropout rate
-    param: lif_dt: LIFモデルの時間刻み
-    param: lif_init_tau: LIFの初期時定数
-    param: lif_min_tau: LIFの最小時定数
-    param: lif_threshold: LIFの発火しきい値
-    param: lif_vrest: LIFの静止膜電位
-    param: lif_reset_mechanism: LIFの膜電位リセットメカニズム
-    param: lif_spike_grad: LIFのスパイク勾配関数
-    param: lif_output: LIFの出力を返すかどうか
+    param: lif_dt: LIF model time step
+    param: lif_init_tau: LIF initial time constant
+    param: lif_min_tau: LIF minimum time constant
+    param: lif_threshold: LIF threshold
+    param: lif_vrest: LIF resting membrane potential
+    param: lif_reset_mechanism: LIF reset mechanism
+    param: lif_spike_grad: LIF spike gradient function
+    param: lif_output: whether to return LIF output
     """
     
     block=[]
@@ -474,7 +474,7 @@ def create_csnn_block(
 
     if is_bn:
         block.append(
-            nn.BatchNorm2d(out_channel,affine=False) #スケーリングγとバイアスβを学習しない
+            nn.BatchNorm2d(out_channel,affine=False) #do not learn scaling γ and bias β
         )
 
     if pool_size>0:
@@ -483,7 +483,7 @@ def create_csnn_block(
         elif pool_type=="max".casefold():
             block.append(nn.MaxPool2d(pool_size))
 
-    #blockの出力サイズを計算
+    #calculate block output size
     block_outsize=get_conv_outsize(nn.Sequential(*block),in_size=in_size,in_channel=in_channel) #[1(batch) x channel x h x w]
 
     block.append(
@@ -505,8 +505,8 @@ def create_csnn_block(
 
 class DynamicCSNN(DynamicSNN):
     """
-    DynamicSNNのCNNバージョン 
-    CNNでは1層スタックするごとにサイズが1/2になる
+    CNN version of DynamicSNN
+    the size is halved for each layer
     """
 
     def __init__(self,conf):
@@ -536,28 +536,28 @@ class DynamicCSNN(DynamicSNN):
 
         modules=[]
 
-        #>> 畳み込み層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> convolution layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         in_c=self.in_channel
         in_size=self.in_size
         for i,hidden_c in enumerate(self.hiddens):
 
             block,block_outsize=create_csnn_block(
                 in_size=in_size, in_channel=in_c, out_channel=hidden_c,
-                kernel=3, stride=1, padding=1,  # カーネルサイズ、ストライド、パディングの設定
+                kernel=3, stride=1, padding=1,  # kernel size, stride, padding
                 is_bias=False, is_bn=self.is_bn, pool_type=self.pool_type,pool_size=self.pool_size[i],dropout=self.dropout,
                 lif_dt=self.dt, lif_init_tau=self.init_tau, lif_min_tau=self.min_tau,
                 lif_threshold=self.v_threshold, lif_vrest=self.v_rest,
                 lif_reset_mechanism=self.reset_mechanism, lif_spike_grad=self.spike_grad,
-                lif_output=False  # 出力を返さない設定
+                lif_output=False  # do not return output
             )
             modules+=block
             in_c=hidden_c
             in_size=block_outsize[-1]
-        #<< 畳み込み層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< convolution layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-        #>> 線形層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> linear layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[
             nn.Flatten(),
             nn.Linear(block_outsize[1]*block_outsize[2]*block_outsize[3],self.linear_hidden,bias=False),
@@ -571,7 +571,7 @@ class DynamicCSNN(DynamicSNN):
                 reset_mechanism=self.reset_mechanism,spike_grad=self.spike_grad,output=True
             ),
         ]
-        #<< 線形層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< linear layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
         self.model=nn.Sequential(*modules)
@@ -584,28 +584,28 @@ def create_residual_block(
         res_actfn="relu",v_actf=None
         ):
     """
-    param: in_size: 幅と高さ (正方形とする)
+    param: in_size: width and height (square)
     param: in_channel: channel size
-    param: out_channel: 出力チャネルのサイズ
-    param: kernel: カーネルサイズ
-    param: stride: ストライドのサイズ
-    param: padding: パディングのサイズ
-    param: is_bias: バイアスを使用するかどうか
-    param: residual_block_num: ResBlock内のCNNの数 (0でもいい)
-    param: is_bn: バッチ正規化を使用するかどうか
-    param: pool_type: プーリングの種類 ("avg"または"max")
-    param: pool_size: プールのサイズ
+    param: out_channel: output channel size
+    param: kernel: kernel size
+    param: stride: stride size
+    param: padding: padding size
+    param: is_bias: whether to use bias
+    param: residual_block_num: number of CNN in ResBlock (0 is also OK)
+    param: is_bn: whether to use batch normalization
+    param: pool_type: pooling type ("avg" or "max")
+    param: pool_size: pool size
     param: dropout: dropout rate
-    param: lif_dt: LIFモデルの時間刻み
-    param: lif_init_tau: LIFの初期時定数
-    param: lif_min_tau: LIFの最小時定数
-    param: lif_threshold: LIFの発火しきい値
-    param: lif_vrest: LIFの静止膜電位
-    param: lif_reset_mechanism: LIFの膜電位リセットメカニズム
-    param: lif_spike_grad: LIFのスパイク勾配関数
-    param: lif_output: LIFの出力を返すかどうか
-    param: res_actfn: 残差ブロックの活性化関数
-    param: v_actf: 膜電位vの活性化関数
+    param: lif_dt: LIF model time step
+    param: lif_init_tau: LIF initial time constant
+    param: lif_min_tau: LIF minimum time constant
+    param: lif_threshold: LIF threshold
+    param: lif_vrest: LIF resting membrane potential
+    param: lif_reset_mechanism: LIF reset mechanism
+    param: lif_spike_grad: LIF spike gradient function
+    param: lif_output: whether to return LIF output
+    param: res_actfn: residual block activation function
+    param: v_actf: membrane potential v activation function
     """
     
     block=[]
@@ -634,7 +634,7 @@ def create_residual_block(
 
     if is_bn:
         block.append(
-            nn.BatchNorm2d(out_channel, affine=False) #スケーリングγとバイアスβを学習しない
+            nn.BatchNorm2d(out_channel, affine=False) #do not learn scaling γ and bias β
         )
 
     if pool_size>0:
@@ -643,7 +643,7 @@ def create_residual_block(
         elif pool_type=="max".casefold():
             block.append(nn.MaxPool2d(pool_size))
 
-    #blockの出力サイズを計算
+    #calculate block output size
     block_outsize=get_conv_outsize(nn.Sequential(*block),in_size=in_size,in_channel=in_channel) #[1(batch) x channel x h x w]
 
     block.append(
@@ -664,8 +664,8 @@ def create_residual_block(
 
 class DynamicResCSNN(DynamicSNN):
     """
-    DynamicSNNのCNNバージョン 
-    さらにCNNをResNetにすることで,深いネットワークの生成も可能
+    CNN version of DynamicSNN
+    by using ResNet, it is possible to generate deep networks
     """
 
     def __init__(self,conf:dict):
@@ -675,7 +675,7 @@ class DynamicResCSNN(DynamicSNN):
         self.in_channel = conf["in-channel"]
         self.out_size = conf["out-size"]
         self.hiddens = conf["hiddens"]
-        self.residual_blocks=conf["residual-block"] #残差ブロックごとのCNNの数
+        self.residual_blocks=conf["residual-block"] #number of CNN in each residual block
         self.pool_type = conf["pool-type"]
         self.pool_size=conf["pool-size"]
         self.is_bn = conf["is-bn"]
@@ -693,35 +693,35 @@ class DynamicResCSNN(DynamicSNN):
         if "fast".casefold() in conf["spike-grad"] and "sigmoid".casefold() in conf["spike-grad"]: 
             self.spike_grad = surrogate.fast_sigmoid()
         self.v_actf=conf["v-actf"] if "v-actf" in conf.keys() else None
-        is_bias=False #基本falseじゃないとラプラス変換の関係式が成り立たない
+        is_bias=False #bias is not allowed. the equation of Laplace transform does not hold
 
 
         modules=[]
 
-        #>> 畳み込み層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> convolution layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         in_c=self.in_channel
         in_size=self.in_size
         for i,hidden_c in enumerate(self.hiddens):
 
             block,block_outsize=create_residual_block(
                 in_size=in_size, in_channel=in_c, out_channel=hidden_c,
-                kernel=3, stride=1, padding=1,  # カーネルサイズ、ストライド、パディングの設定
+                kernel=3, stride=1, padding=1,  # kernel size, stride, padding
                 is_bias=is_bias, residual_block_num=self.residual_blocks[i],
                 is_bn=self.is_bn, pool_type=self.pool_type,pool_size=self.pool_size[i],dropout=self.dropout,
                 lif_dt=self.dt, lif_init_tau=self.init_tau, lif_min_tau=self.min_tau,
                 lif_threshold=self.v_threshold, lif_vrest=self.v_rest,
                 lif_reset_mechanism=self.reset_mechanism, lif_spike_grad=self.spike_grad,
-                lif_output=False,  # 出力を返さない設定
+                lif_output=False,  # do not return output
                 res_actfn=self.res_actfn, v_actf=self.v_actf
             )
             modules+=block
             in_c=hidden_c
             in_size=block_outsize[-1]
-        #<< 畳み込み層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< convolution layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-        #>> 線形層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> linear layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[nn.Flatten()]
         in_size=block_outsize[1]*block_outsize[2]*block_outsize[3]
         for h in self.linear_hidden:
@@ -740,7 +740,7 @@ class DynamicResCSNN(DynamicSNN):
                 reset_mechanism=self.reset_mechanism,spike_grad=self.spike_grad,output=True, v_actf=self.v_actf
             ),
         ]
-        #<< 線形層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< linear layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
         self.model=nn.Sequential(*modules)
@@ -750,18 +750,18 @@ class DynamicResCSNN(DynamicSNN):
 
 if __name__=="__main__":
     """
-    テスト項目
+    test items
     :forwad
-        :モデルの入出力
-        :GPUの利用
-        :DynamicLIFのτのサイズ
-        :モデルの保存とロード
+        :model input and output
+        :GPU utilization
+        :DynamicLIF tau size
+        :model save and load
 
     :dynamic_forward
-        :モデルの入出力
-        :GPUの利用
-        :DynamicLIFのτのサイズ
-        :DynamicLIFのτの変動
+        :model input and output
+        :GPU utilization
+        :DynamicLIF tau size
+        :DynamicLIF tau variation
     """
 
     import yaml

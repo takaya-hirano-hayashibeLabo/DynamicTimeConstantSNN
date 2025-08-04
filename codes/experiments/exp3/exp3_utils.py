@@ -5,7 +5,7 @@ import mink
 
 def transform_matrix(quaternion, position):
     """
-    クォータニオンと位置座標からTmatrixを計算
+    calculate transformation matrix from quaternion and position
     :param quaternion: [x,y,z,w]
     :param position: [x,y,z]
     :return: 4x4 transformation matrix
@@ -26,7 +26,7 @@ def transform_matrix(quaternion, position):
 
 def np2SE3_target(quaternion:np.ndarray,position:np.ndarray):
     """
-    numpyのクォータニオンと位置をminkのtargetに変換する
+    convert quaternion and position to mink target
     :param quaternion: [x,y,z,w]
     :param position: [x,y,z]
     :return: 4x4 transformation matrix
@@ -39,12 +39,12 @@ def np2SE3_target(quaternion:np.ndarray,position:np.ndarray):
 
 def save_video(frames, output_path, file_name, fps=30, scale=5, frame_label_view=True):
     """
-    :param frames: 動画のリスト [t x h x w x c]
-    :param output_path: 出力パス
-    :param file_name: ファイル名
-    :param fps: フレームレート
-    :param scale: スケール
-    :param frame_label_view: フレームラベル表示
+    :param frames: list of frames [t x h x w x c]
+    :param output_path: output path
+    :param file_name: file name
+    :param fps: frame rate
+    :param scale: scale
+    :param frame_label_view: frame label view
     """
     import cv2
     import subprocess

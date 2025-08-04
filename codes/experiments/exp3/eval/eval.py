@@ -1,6 +1,6 @@
 """
-dynamic forwadで軌道速度を変えてみる
-入力を関節角度にする
+change trajectory speed with dynamic forward
+use joint angles as input
 """
 
 from pathlib import Path
@@ -28,16 +28,16 @@ import torch
 import pandas as pd
 import json
 from copy import deepcopy
-sys.path.append(str(ROOT/"codes")) #モデルを入れる
+sys.path.append(str(ROOT/"codes")) #put model here
 from models import DynamicSNN, ContinuousSNN, ThresholdEncoder, SNN
 from utils import load_yaml,load_json2dict
 
 
 def error_feedback(target_position, ref_trajectory):
     """
-    目標位置と参照軌道から誤差を計算してフィードバックする
-    :param target_position: 目標位置 [x,y]
-    :param ref_trajectory: 参照軌道 [x,y]の配列
+    calculate error from target position and reference trajectory and feedback
+    :param target_position: target position [x,y]
+    :param ref_trajectory: reference trajectory [x,y] array
     """
 
     if not isinstance(ref_trajectory,np.ndarray):
@@ -64,10 +64,10 @@ def calculate_timescale(current_timescale,delta_timescale,end_timescale):
 
 def add_volt2trajectory(volt:np.ndarray,volt_trajectory:list):
     """
-    :param volt: 膜電位 [T x hidden_size]
+    :param volt: membrane potential [T x hidden_size]
     """
 
-    if None in volt_trajectory[-1]: #最新のvolt_trajectoryにNoneがあるとき
+    if None in volt_trajectory[-1]: #if None is in the latest volt_trajectory
         # print(volt_trajectory)
         # print(f"volt shape: {volt.shape}")
         volt_trj_np=np.array(volt_trajectory)
@@ -82,15 +82,15 @@ def add_volt2trajectory(volt:np.ndarray,volt_trajectory:list):
 if __name__ == "__main__":
 
     parser=argparse.ArgumentParser()
-    parser.add_argument("--modelpath",required=True, help="絶対パス")
-    parser.add_argument("--trjpath",required=True, help="絶対パス")
-    parser.add_argument("--kfb",default=0.05,type=float,help="誤差フィードバックの係数")
-    parser.add_argument("--timescale_duration",default=1.0,type=float, help="timescaleの変化時間 [s]")
+    parser.add_argument("--modelpath",required=True, help="absolute path")
+    parser.add_argument("--trjpath",required=True, help="absolute path")
+    parser.add_argument("--kfb",default=0.05,type=float,help="error feedback coefficient")
+    parser.add_argument("--timescale_duration",default=1.0,type=float, help="timescale change time [s]")
     parser.add_argument("--end_timescale",default=1.0,type=float)
     parser.add_argument("--deltatime",default=0.07, type=float)
-    parser.add_argument("--nloop",default=1,type=int,help="軌道のループ回数. 最初の流し運転を含まない")
+    parser.add_argument("--nloop",default=1,type=int,help="number of loops. not including the initial run")
     parser.add_argument("--saveto",required=True)
-    parser.add_argument("--nhead",default=None,type=int,help="流し運転のデータ数")
+    parser.add_argument("--nhead",default=None,type=int,help="number of initial run data")
     args=parser.parse_args()
 
     nn_modelpath=Path(args.modelpath)
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     time_enc.eval()
     snn_hidden_size=nn_conf["model"]["out-size"]
 
-    # # time_encの最終層の重みを取得して表示
+    # # get the weights of the final layer of time_enc and display
     # time_enc_weights = list(time_enc.parameters())[-1]
     # print("Time Encoder Final Layer Weights:")
     # print(time_enc_weights)
@@ -125,13 +125,13 @@ if __name__ == "__main__":
 
     sequence=nn_conf["train"]["sequence"]
 
-    # # nn_modelの最終層の重みを取得して表示
+    # # get the weights of the final layer of nn_model and display
     # nn_model_weights = list(nn_model.time_encoder.parameters())[-1]
     # print("SNN Model Final Layer Weights:")
     # print(nn_model_weights)
 
 
-    #>> encoderの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> encoder preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     encoder_conf=nn_conf["encoder"]
     if encoder_conf["type"].casefold()=="thr":
         encoder=ThresholdEncoder(
@@ -140,12 +140,12 @@ if __name__ == "__main__":
         )
     else:
         raise ValueError(f"encoder type {encoder_conf['type']} is not supportated...")
-    #<< encoderの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< encoder preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
-    #>> データの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> data preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     trj_conf=load_yaml(trj_datapath.parent/"conf.yml")
-    loop_duration=trj_conf["trajectory"]["loop_duration"] #基準データが一周にかかる時間
+    loop_duration=trj_conf["trajectory"]["loop_duration"] #time for one loop
     
     datasets=pd.read_csv(trj_datapath)
     
@@ -160,7 +160,7 @@ if __name__ == "__main__":
 
     target_datas=datasets[["target_x","target_y"]]
     if nn_conf["output-model"]["out-type"].casefold()=="velocity":
-        target_datas=target_datas.diff().iloc[1:] #最初の行はNaNになるので除外
+        target_datas=target_datas.diff().iloc[1:] #first row is NaN, so exclude it
     elif nn_conf["output-model"]["out-type"].casefold()=="position":
         target_datas=target_datas.iloc[1:]
     target_max=target_datas.max()
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     target_min=target_datas.min()
     target_min.name="min"
 
-    target_positions=datasets[["target_x","target_y"]].values[1:] #目標位置座標
+    target_positions=datasets[["target_x","target_y"]].values[1:] #target position coordinates
 
     n_head=sequence if args.nhead is None else int(args.nhead)
     in_trajectory=[]
@@ -177,19 +177,19 @@ if __name__ == "__main__":
     endeffector_deltapos=[]
     time_trajectory=[]
     volt_trajectory=[]
-    #>> データの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> data preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
-    #>> 参照軌道の生成 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> reference trajectory generation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     ref_conf=deepcopy(trj_conf["trajectory"])
-    ref_conf["delta_time"]=args.deltatime/10 #参照軌道の時間分解能を上げる
+    ref_conf["delta_time"]=args.deltatime/10 #increase the time resolution of the reference trajectory
     ref_conf["num_loops"]=2
     ref_trajectory=generate_trajectory(
         ref_conf,
     )
-    ref_trajectory=np.array(ref_trajectory)[:,1:] #x,yのみを取り出す
-    k_fb=args.kfb #誤差フィードバックの係数
-    #<< 参照軌道の生成 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    ref_trajectory=np.array(ref_trajectory)[:,1:] #extract x,y only
+    k_fb=args.kfb #error feedback coefficient
+    #<< reference trajectory generation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
     model = mujoco.MjModel.from_xml_path(_XML.as_posix())
@@ -250,26 +250,26 @@ if __name__ == "__main__":
             delta_time=args.deltatime
             elapsed_time=delta_time
             total_time=delta_time
-            current_timescale=1.0 #初期は1倍速
+            current_timescale=1.0 #initial timescale is 1
             end_timescale=args.end_timescale
-            delta_timescale=(end_timescale-1.0)/(args.timescale_duration/delta_time) #delta_timeごとにtimescaleを変化させる
+            delta_timescale=(end_timescale-1.0)/(args.timescale_duration/delta_time) #change timescale every delta_time
 
-            max_exptime=loop_duration*args.nloop*end_timescale #実験の最大時間(流し運転を含まない)
-            exptime=0.0 #流し運転が終わってからの経過時間
+            max_exptime=loop_duration*args.nloop*end_timescale #maximum time of experiment (not including the initial run)
+            exptime=0.0 #elapsed time since the initial run
             while viewer.is_running():
 
-                if exptime>max_exptime: break #実験の最大時間を超えたら終了
+                if exptime>max_exptime: break #if the experiment time exceeds the maximum time, exit
 
-                #>> 目標軌道の推定 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+                #>> target trajectory estimation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
                 elapsed_time+=rate.dt
                 total_time+=rate.dt
                 if elapsed_time>delta_time:
 
                     time_trajectory.append(total_time)
 
-                    elapsed_time=0.0 #経過時間のリセット
+                    elapsed_time=0.0 #reset elapsed time
 
-                    if run_count<n_head: #最初は流し運転
+                    if run_count<n_head: #first is initial run
 
                         if len(in_trajectory)>sequence:
                             in_x=np.array(in_trajectory)[-sequence:] if len(in_trajectory)>sequence else np.array(in_trajectory)
@@ -303,9 +303,9 @@ if __name__ == "__main__":
                         endeffector_target_trajectory.append(target_positions[run_count])
 
                     else:        
-                        exptime+=delta_time #流し運転が終わってからの経過時間を更新
+                        exptime+=delta_time #update elapsed time since the initial run
 
-                        sequence_t=sequence#int(sequence*current_timescale) #timescaleに応じてsequenceの長さを変える
+                        sequence_t=sequence#int(sequence*current_timescale) #change sequence length according to timescale
                         in_x=np.array(in_trajectory)[-sequence_t:] if len(in_trajectory)>sequence_t else np.array(in_trajectory)
                         in_x=2*(in_x-input_min.values)/(input_max.values-input_min.values)-1
                         in_spike=encoder(torch.Tensor(in_x).unsqueeze(0))
@@ -327,8 +327,8 @@ if __name__ == "__main__":
                         print(f"total time: {total_time:.2f}, runcount: {run_count}, out nrm: {out_nrm}, out: {out}, in_spike count: {in_spike[0][-1].sum()}")
 
                         current_position=np.array(data.site("attachment_site").xpos)[:-1]
-                        dposition= out + k_fb*error_feedback(current_position, ref_trajectory) #NN予測 + 誤差フィードバック
-                        next_target=current_position+dposition/current_timescale #現在位置に差分を足し合わせる. current_timescaleで割るのは数学的に正しい(と思う)
+                        dposition= out + k_fb*error_feedback(current_position, ref_trajectory) #NN prediction + error feedback
+                        next_target=current_position+dposition/current_timescale #add difference to current position. divide by current_timescale for mathematical correctness
                         
                         in_trajectory.append(list(data.qpos))
                         current_timescale=calculate_timescale(current_timescale,delta_timescale,end_timescale)
@@ -339,7 +339,7 @@ if __name__ == "__main__":
 
                     target_x,target_y=endeffector_target_trajectory[-1]
                     run_count+=1
-                #<< 目標軌道の推定 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                #<< target trajectory estimation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
                 # Update task target.
@@ -347,7 +347,7 @@ if __name__ == "__main__":
                     quaternion=[1,0,0,0],
                     position=[target_x,target_y,0.3]
                 )
-                end_effector_task.set_target(T_wt) #ここでSE3型のクォータニオンとxyz座標を与えるだけ
+                end_effector_task.set_target(T_wt) #just give quaternion and xyz coordinates here
 
                 # Compute velocity and integrate into the next configuration.
                 vel = mink.solve_ik(
@@ -362,7 +362,7 @@ if __name__ == "__main__":
                 mujoco.mj_sensorPos(model, data)
 
                 # Visualize at fixed FPS.
-                viewer.sync() #これをつけるとアームの動きが描画される(中の物理状態はviewerにかかわらず更新されている)
+                viewer.sync() #if this is added, the arm motion is visualized (the internal physical state is updated regardless of the viewer)
                 # rate.sleep()
 
             

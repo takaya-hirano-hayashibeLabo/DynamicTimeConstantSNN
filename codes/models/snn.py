@@ -9,7 +9,7 @@ from .lif_model import LIF
 
 class SNN(nn.Module):
     """
-    time constant(TC)が動的に変動するSNN
+    SNN with dynamic time constant(TC)
     """
 
     def __init__(self,conf:dict):
@@ -31,13 +31,13 @@ class SNN(nn.Module):
         self.reset_mechanism = conf["reset-mechanism"]
         if "fast".casefold() in conf["spike-grad"] and "sigmoid".casefold() in conf["spike-grad"]: 
             self.spike_grad = surrogate.fast_sigmoid()
-        self.reset_outv=conf["reset-outmem"] if "reset-outmem" in conf.keys() else True #最終層のLifをリセットするか
+        self.reset_outv=conf["reset-outmem"] if "reset-outmem" in conf.keys() else True #whether to reset the last layer's LIF
 
 
         modules=[]
         is_bias=True
 
-        #>> 入力層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> input layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[
             nn.Linear(self.in_size, self.hiddens[0],bias=is_bias),
             LIF(
@@ -46,9 +46,9 @@ class SNN(nn.Module):
             ),
             nn.Dropout(self.dropout),
         ]
-        #<< 入力層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< input layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-        #>> 中間層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> intermediate layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         prev_hidden=self.hiddens[0]
         for hidden in self.hiddens[1:]:
             modules+=[
@@ -60,19 +60,19 @@ class SNN(nn.Module):
                 nn.Dropout(self.dropout),
             ]
             prev_hidden=hidden
-        #<< 中間層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< intermediate layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-        #>> 出力層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> output layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[
             nn.Linear(self.hiddens[-1], self.out_size,bias=is_bias),
 
-            # 出力層のLIFだけ, 膜電位のリセットbool値を与える
+            # give the reset bool value of the membrane potential to the last layer's LIF
             LIF(
                 in_size=(self.out_size,),dt=self.dt,init_tau=self.init_tau, min_tau=self.min_tau,threshold=self.v_threshold,vrest=self.v_rest,
                 reset_mechanism=self.reset_mechanism,spike_grad=self.spike_grad,output=True,is_train_tau=self.is_train_tau,reset_v=self.reset_outv
             ),
         ]
-        #<< 出力層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< output layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
         self.model=nn.Sequential(*modules)
 
@@ -85,7 +85,7 @@ class SNN(nn.Module):
 
     def forward(self,s:torch.Tensor):
         """
-        :param s: スパイク列 [T x batch x ...]
+        :param s: spike sequence [T x batch x ...]
         :return out_s: [T x batch x ...]
         :return out_v: [T x batch x ...]
         """
@@ -119,8 +119,8 @@ class SNN(nn.Module):
 
     def split_weight_decay_params(self, no_decay_param_names:list=["w","bias"], weight_decay:float=0.01):
         """
-        weight decayを適用するパラメータと適用しないパラメータを分ける  
-        L2正則化は基本的に重みのみ (biasや時定数には適用しない)
+        split the parameters to be applied and not applied weight decay
+        L2 regularization is basically applied to weights only (not to bias or time constants)
         """
         decay_params=[]
         no_decay_params=[]
@@ -151,25 +151,25 @@ def add_csnn_block(
         lif_dt,lif_init_tau,lif_min_tau,lif_threshold,lif_vrest,lif_reset_mechanism,lif_spike_grad,lif_output,is_train_tau
         ):
     """
-    param: in_size: 幅と高さ (正方形とする)
+    param: in_size: width and height (square)
     param: in_channel: channel size
-    param: out_channel: 出力チャネルのサイズ
-    param: kernel: カーネルサイズ
-    param: stride: ストライドのサイズ
-    param: padding: パディングのサイズ
-    param: is_bias: バイアスを使用するかどうか
-    param: is_bn: バッチ正規化を使用するかどうか
-    param: pool_type: プーリングの種類 ("avg"または"max")
+    param: out_channel: output channel size
+    param: kernel: kernel size
+    param: stride: stride size
+    param: padding: padding size
+    param: is_bias: whether to use bias
+    param: is_bn: whether to use batch normalization
+    param: pool_type: pooling type ("avg" or "max")
     param: dropout: dropout rate
-    param: lif_dt: LIFモデルの時間刻み
-    param: lif_init_tau: LIFの初期時定数
-    param: lif_min_tau: LIFの最小時定数
-    param: lif_threshold: LIFの発火しきい値
-    param: lif_vrest: LIFの静止膜電位
-    param: lif_reset_mechanism: LIFの膜電位リセットメカニズム
-    param: lif_spike_grad: LIFのスパイク勾配関数
-    param: lif_output: LIFの出力を返すかどうか
-    param: is_train_tau: LIFのtrain_tauを学習させるかどうか
+    param: lif_dt: LIF model time step
+    param: lif_init_tau: LIF initial time constant
+    param: lif_min_tau: LIF minimum time constant
+    param: lif_threshold: LIF firing threshold
+    param: lif_vrest: LIF resting membrane potential
+    param: lif_reset_mechanism: LIF membrane potential reset mechanism
+    param: lif_spike_grad: LIF spike gradient function
+    param: lif_output: whether to return the output of LIF
+    param: is_train_tau: whether to learn the time constant of LIF
     """
     
     block=[]
@@ -190,7 +190,7 @@ def add_csnn_block(
     elif pool_type=="max".casefold():
         block.append(nn.MaxPool2d(pool_size))
 
-    #blockの出力サイズを計算
+    #calculate the output size of the block
     block_outsize=get_conv_outsize(nn.Sequential(*block),in_size=in_size,in_channel=in_channel) #[1(batch) x channel x h x w]
 
     block.append(
@@ -239,29 +239,29 @@ class CSNN(SNN):
 
         modules=[]
 
-        #>> 畳み込み層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> convolution layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         in_c=self.in_channel
         in_size=self.in_size
         for i,hidden_c in enumerate(self.hiddens):
 
             block,block_outsize=add_csnn_block(
                 in_size=in_size, in_channel=in_c, out_channel=hidden_c,
-                kernel=3, stride=1, padding=1,  # カーネルサイズ、ストライド、パディングの設定
+                kernel=3, stride=1, padding=1,  # kernel size, stride, padding
                 is_bias=True, is_bn=self.is_bn, pool_type=self.pool_type, pool_size=self.pool_size[i] , dropout=self.dropout,
                 lif_dt=self.dt, lif_init_tau=self.init_tau, lif_min_tau=self.min_tau,
                 lif_threshold=self.v_threshold, lif_vrest=self.v_rest,
                 lif_reset_mechanism=self.reset_mechanism, lif_spike_grad=self.spike_grad,
-                lif_output=False,  # 出力を返さない設定
+                lif_output=False,  # do not return the output
                 is_train_tau=self.is_train_tau
             )
             modules+=block
             in_c=hidden_c
             in_size=block_outsize[-1]
-        #<< 畳み込み層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< convolution layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-        #>> 線形層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> linear layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[
             nn.Flatten(),
             nn.Linear(block_outsize[1]*block_outsize[2]*block_outsize[3],self.linear_hidden,bias=True),
@@ -275,7 +275,7 @@ class CSNN(SNN):
                 reset_mechanism=self.reset_mechanism,spike_grad=self.spike_grad,output=True,is_train_tau=self.is_train_tau
             ),
         ]
-        #<< 線形層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< linear layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
         self.model=nn.Sequential(*modules)
@@ -287,28 +287,28 @@ def add_residual_block(
         res_actfn
         ):
     """
-    param: in_size: 幅と高さ (正方形とする)
+    param: in_size: width and height (square)
     param: in_channel: channel size
-    param: out_channel: 出力チャネルのサイズ
-    param: kernel: カーネルサイズ
-    param: stride: ストライドのサイズ
-    param: padding: パディングのサイズ
-    param: is_bias: バイアスを使用するかどうか
-    param: residual_block_num: ResBlock内のCNNの数 (0でもいい)
-    param: is_bn: バッチ正規化を使用するかどうか
-    param: pool_type: プーリングの種類 ("avg"または"max")
-    param: pool_size: プールのサイズ
+    param: out_channel: output channel size
+    param: kernel: kernel size
+    param: stride: stride size
+    param: padding: padding size
+    param: is_bias: whether to use bias
+    param: residual_block_num: number of CNN in ResBlock (0 is also OK)
+    param: is_bn: whether to use batch normalization
+    param: pool_type: pooling type ("avg" or "max")
+    param: pool_size: pool size
     param: dropout: dropout rate
-    param: lif_dt: LIFモデルの時間刻み
-    param: lif_init_tau: LIFの初期時定数
-    param: lif_min_tau: LIFの最小時定数
-    param: lif_threshold: LIFの発火しきい値
-    param: lif_vrest: LIFの静止膜電位
-    param: lif_reset_mechanism: LIFの膜電位リセットメカニズム
-    param: lif_spike_grad: LIFのスパイク勾配関数
-    param: lif_output: LIFの出力を返すかどうか
-    param: is_train_tau: LIFのtauを学習するかどうか
-    param: res_actfn: 残差ブロックの活性化関数 {relu, lif}
+    param: lif_dt: LIF model time step
+    param: lif_init_tau: LIF initial time constant
+    param: lif_min_tau: LIF minimum time constant
+    param: lif_threshold: LIF firing threshold
+    param: lif_vrest: LIF resting membrane potential
+    param: lif_reset_mechanism: LIF membrane potential reset mechanism
+    param: lif_spike_grad: LIF spike gradient function
+    param: lif_output: whether to return the output of LIF
+    param: is_train_tau: whether to learn the time constant of LIF
+    param: res_actfn: residual block activation function {relu, lif}
     """
     
     block=[]
@@ -345,7 +345,7 @@ def add_residual_block(
         elif pool_type=="max".casefold():
             block.append(nn.MaxPool2d(pool_size))
 
-    #blockの出力サイズを計算
+    #calculate the output size of the block
     block_outsize=get_conv_outsize(nn.Sequential(*block),in_size=in_size,in_channel=in_channel) #[1(batch) x channel x h x w]
 
     block.append(
@@ -366,7 +366,7 @@ def add_residual_block(
 
 class ResCSNN(SNN):
     """
-    CNNを残差にしたSNN
+    SNN with residual CNN
     """
     def __init__(self,conf):
         super(ResCSNN,self).__init__(conf)
@@ -375,13 +375,13 @@ class ResCSNN(SNN):
         self.in_channel = conf["in-channel"]
         self.out_size = conf["out-size"]
         self.hiddens = conf["hiddens"]
-        self.residual_blocks=conf["residual-block"] #残差ブロックごとのCNNの数
+        self.residual_blocks=conf["residual-block"] #number of CNN in each residual block
         self.pool_type = conf["pool-type"]
         self.pool_size=conf["pool-size"]
         self.is_bn = conf["is-bn"]
         self.linear_hidden = conf["linear-hidden"]
         self.dropout = conf["dropout"]
-        self.res_actfn=conf["res-actfn"] if "res-actfn" in conf.keys() else "relu" #残差ブロックの活性化関数
+        self.res_actfn=conf["res-actfn"] if "res-actfn" in conf.keys() else "relu" #residual block activation function
 
         self.output_mem=conf["output-membrane"]
         self.dt = conf["dt"]
@@ -394,11 +394,11 @@ class ResCSNN(SNN):
         if "fast".casefold() in conf["spike-grad"] and "sigmoid".casefold() in conf["spike-grad"]: 
             self.spike_grad = surrogate.fast_sigmoid()
 
-        is_bias=conf["is-bias"] if "is-bias" in conf.keys() else True #CNNバイアスをつけるかどうか
+        is_bias=conf["is-bias"] if "is-bias" in conf.keys() else True #whether to use bias for CNN
 
         modules=[]
 
-        #>> 畳み込み層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> convolution layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         in_c=self.in_channel
         in_size=self.in_size
         for i,hidden_c in enumerate(self.hiddens):
@@ -406,22 +406,22 @@ class ResCSNN(SNN):
             block,block_outsize=add_residual_block(
                 res_actfn=self.res_actfn,
                 in_size=in_size, in_channel=in_c, out_channel=hidden_c,
-                kernel=3, stride=1, padding=1,  # カーネルサイズ、ストライド、パディングの設定
+                kernel=3, stride=1, padding=1,  # kernel size, stride, padding
                 is_bias=is_bias, residual_block_num=self.residual_blocks[i],
                 is_bn=self.is_bn, pool_type=self.pool_type,pool_size=self.pool_size[i],dropout=self.dropout,
                 lif_dt=self.dt, lif_init_tau=self.init_tau, lif_min_tau=self.min_tau,
                 lif_threshold=self.v_threshold, lif_vrest=self.v_rest,
                 lif_reset_mechanism=self.reset_mechanism, lif_spike_grad=self.spike_grad,
-                lif_output=False, is_train_tau=self.is_train_tau  # 出力を返さない設定
+                lif_output=False, is_train_tau=self.is_train_tau  # do not return the output
             )
             modules+=block
             in_c=hidden_c
             in_size=block_outsize[-1]
-        #<< 畳み込み層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< convolution layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-        #>> 線形層 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        #>> linear layer >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         modules+=[
             nn.Flatten(),
             nn.Linear(block_outsize[1]*block_outsize[2]*block_outsize[3],self.linear_hidden,bias=is_bias),
@@ -435,7 +435,7 @@ class ResCSNN(SNN):
                 reset_mechanism=self.reset_mechanism,spike_grad=self.spike_grad,output=True,is_train_tau=self.is_train_tau
             ),
         ]
-        #<< 線形層 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        #<< linear layer <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
         self.model=nn.Sequential(*modules)

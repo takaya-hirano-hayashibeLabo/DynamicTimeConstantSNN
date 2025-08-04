@@ -1,6 +1,6 @@
 """
-ロボットの関節角度と目標軌道のペアをデータセットとして集めるスクリプト  
-あとは集めたデータで教師あり学習するだけ
+Script to collect pairs of robot joint angles and target trajectories as a dataset.
+The rest is just supervised learning with the collected data.
 """
 
 from pathlib import Path
@@ -33,22 +33,22 @@ def main():
     parser.add_argument("--configpath",required=True)
     args=parser.parse_args()
 
-    # 軌道設定のYAMLファイルを読み込む
+    # Read the YAML file for trajectory settings
     config_path=args.configpath
     with open(config_path, 'r',encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    # >> 軌道生成 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    # >> Trajectory generation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     trajectory_config=config["trajectory"]
     delta_time = trajectory_config['delta_time']
     trajectory = generate_trajectory(trajectory_config)
 
     _,target_x,target_y=trajectory.pop(0)
-    T_wt=np2SE3_target( #初期座標
+    T_wt=np2SE3_target( # Initial coordinates
         quaternion=np.array([1,0,0,0]),
         position=np.array([target_x,target_y,0.3])
     )
-    # << 軌道生成 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    # << Trajectory generation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
     result_path=DATAPATH
@@ -109,36 +109,36 @@ def main():
         mink.move_mocap_to_frame(model, data, "target", "attachment_site", "site")
 
         rate = RateLimiter(frequency=500.0, warn=False)
-        elapsed_t_from_set_target=0 #targetを指定してからの経過時間
+        elapsed_t_from_set_target=0 # Elapsed time since specifying the target
         while viewer.is_running():
 
 
-            if len(trajectory)<1: break #軌道がなくなったらおしまい
+            if len(trajectory)<1: break # End if there are no more trajectories
 
 
-            # >>目標位置と姿勢を指定する>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            # >> Specify target position and orientation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             elapsed_t_from_set_target+=rate.dt
-            if elapsed_t_from_set_target>delta_time: #制御周期と目標軌道周期は違う
+            if elapsed_t_from_set_target>delta_time: # Control period and target trajectory period are different
                 target_t,target_x,target_y=trajectory.pop(0)
-                target_z=0.3 #z座標は固定
+                target_z=0.3 # z coordinate is fixed
                 T_wt=np2SE3_target(
-                    quaternion=np.array([1,0,0,0]), #姿勢は固定
+                    quaternion=np.array([1,0,0,0]), # Orientation is fixed
                     position=np.array([target_x,target_y,target_z])
                 )
-                elapsed_t_from_set_target=0.0 #経過時間をリセット
+                elapsed_t_from_set_target=0.0 # Reset elapsed time
                 # print(T_wt)
 
-                datasets.append(( #ロボットの状態と目標軌道を記録
+                datasets.append(( # Record robot state and target trajectory
                     target_t,
-                    *data.qpos, #各関節の角度
-                    *data.site("attachment_site").xpos, #エンドエフェクタの位置
-                    target_x,target_y,target_z, #目標の手先位置
+                    *data.qpos, # Angle of each joint
+                    *data.site("attachment_site").xpos, # Position of end-effector
+                    target_x,target_y,target_z, # Target end-effector position
                 ))
                 print(f"endpos:{data.site('attachment_site').xpos[:-1]}, target:{target_x,target_y}")
-            # <<目標位置と姿勢を指定する<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            # << Specify target position and orientation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
-            end_effector_task.set_target(T_wt) #ここでSE3型のクォータニオンとxyz座標を与えるだけ
+            end_effector_task.set_target(T_wt) # Just give the SE3-type quaternion and xyz coordinates here
 
             # Compute velocity and integrate into the next configuration.
             vel = mink.solve_ik(
@@ -154,7 +154,7 @@ def main():
 
             # Visualize at fixed FPS.
             viewer.sync()
-            # rate.sleep() #現実時間とシミュレータ時間をあわせる    
+            # rate.sleep() # Synchronize real time and simulator time    
 
 
     datasets_db=pd.DataFrame(
@@ -169,12 +169,12 @@ def main():
     datasets_db.to_csv(result_path/"datasets.csv",index=False)
 
 
-    #>> configの保存 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> Save config >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     with open(config_path, 'r',encoding="utf-8") as file:
         config_lines = file.readlines()
     with open(result_path/"conf.yml", 'w',encoding="utf-8") as file:
         file.writelines(config_lines)
-    # << configの保存 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    # << Save config <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 if __name__ == "__main__":

@@ -117,10 +117,10 @@ def custom_collate_fn(batch):
     # numpy.ndarrayをTensorに変換
     inputs = [torch.tensor(input) for input in inputs]
     
-    # パディングを使用してテンソルのサイズを揃える
+    # use padding to align the size of the tensors
     inputs_padded = pad_sequence(inputs, batch_first=True)
     
-    # targetsは整数のリストなので、そのままテンソルに変換
+    # targets is a list of integers, so convert it to a tensor
     targets_tensor = torch.tensor(targets)
     
     return inputs_padded, targets_tensor
@@ -129,12 +129,12 @@ def custom_collate_fn(batch):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--target', type=str,help="configのあるパス", required=True)
-    parser.add_argument("--device",default=0,help="GPUの番号")
+    parser.add_argument('--target', type=str,help="path to config", required=True)
+    parser.add_argument("--device",default=0,help="GPU number")
     args = parser.parse_args()
 
 
-    #>> configの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> config preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     device=torch.device(f"cuda:{args.device}") if torch.cuda.is_available() else torch.device("cpu")
     resultpath=Path(args.target)/"result"
     if not os.path.exists(resultpath/"models"):
@@ -148,11 +148,11 @@ def main():
     save_interval=train_conf["save_interval"]
     minibatch=train_conf["batch"]
     base_sequence=train_conf["sequence"]
-    #<< configの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< config preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-    #>> モデルの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> model preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     if model_conf["type"]=="dynamic-snn".casefold():
         time_model=DynamicSNN(model_conf)
     elif model_conf["type"]=="snn".casefold():
@@ -160,16 +160,16 @@ def main():
     else:
         raise ValueError(f"model type {model_conf['type']} is not supportated...")
     model=ContinuousSNN(conf["output-model"],time_model)
-    criterion=torch.nn.MSELoss() #連続値推論なのでMSE
+    criterion=torch.nn.MSELoss() #continuous value prediction so MSE
     print(model)
     model.to(device)
     optim=torch.optim.Adam(model.parameters(),lr=train_conf["lr"])
     if train_conf["schedule-step"]>0:   
         scheduler=StepLR(optimizer=optim,step_size=train_conf["schedule-step"],gamma=train_conf["schedule-rate"])
-    #<< モデルの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< model preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
-    #>> encoderの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> encoder preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     if encoder_conf["type"].casefold()=="thr":
         encoder=ThresholdEncoder(
             thr_max=encoder_conf["thr-max"],thr_min=encoder_conf["thr-min"],
@@ -177,32 +177,21 @@ def main():
         )
     else:
         raise ValueError(f"encoder type {encoder_conf['type']} is not supportated...")
-    #<< encoderの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< encoder preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
-    #>> データの準備 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> data preparation >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     datapath:Path=ROOT/"data"/train_conf["datapath"]
     datasets=pd.read_csv(datapath)
     # print(datasets)
-
-    # # 各列を最大値と最小値で正規化
-    # datasets_normalized = (datasets - datasets.min()) / (datasets.max() - datasets.min())
-    # print(datasets_normalized)
-    # datasets_normalized.to_csv(datapath.parent/"datasets_norm.csv",index=False)
-
-    # # 各列の差分を計算し、最小値を出力
-    # diffs = datasets_normalized.diff().iloc[1:]  # 最初の行は NaN になるので除外
-    # min_diffs = diffs.min()
-    # print("Minimum differences for each column:")
-    # print(min_diffs)
 
     input_labels=["joint0","joint1","joint2","joint3","joint4","joint5"]
     # input_labels=[f"endpos_{label}" for label in ["x","y"]]
     input_datas=datasets[input_labels]
 
-    ignore_head=200 #最初の200データは正規化パラメータの計算で無視
+    ignore_head=200 #first 200 data is ignored for normalization parameter calculation
     input_max=input_datas.iloc[ignore_head:].max()
-    input_max["joint4"]=1e10 #joint4は動かないので、正規化後の値はほぼ0とする
+    input_max["joint4"]=1e10 #joint4 is not moving, so the normalized value is almost 0
     input_max.name="max"
     input_min=input_datas.iloc[ignore_head:].min()
     input_min.name="min"
@@ -211,7 +200,7 @@ def main():
     input_nrm_params=input_nrm_params.to_dict()
     save_dict2json(input_nrm_params,resultpath/"input_nrm_params.json")
 
-    input_nrm_datas=2*((input_datas-input_min)/(input_max-input_min))[1:].values - 1 #入力データの正規化
+    input_nrm_datas=2*((input_datas-input_min)/(input_max-input_min))[1:].values - 1 #input data normalization
 
     input_nrm_datas_diff=np.abs(np.diff(input_nrm_datas,axis=0))
     print(f"input_nrm_datas_diff min: {np.min(input_nrm_datas_diff,axis=0)}")
@@ -233,7 +222,7 @@ def main():
         plot_frequency_and_power_spectrum(target_datas[column].diff().iloc[1:].dropna().values, column, resultpath)
 
     if conf["output-model"]["out-type"].casefold()=="velocity":
-        target_datas=target_datas.diff().iloc[1:] #最初の行はNaNになるので除外
+        target_datas=target_datas.diff().iloc[1:] #first row is NaN so exclude it
     elif conf["output-model"]["out-type"].casefold()=="position":
         target_datas=target_datas.iloc[1:]
     target_max=target_datas.max()
@@ -245,7 +234,7 @@ def main():
     target_nrm_params=target_nrm_params.to_dict()
     save_dict2json(target_nrm_params,resultpath/"target_nrm_params.json")
 
-    target_datas=2*((target_datas-target_min)/(target_max-target_min)).values - 1 #正解データの正規化
+    target_datas=2*((target_datas-target_min)/(target_max-target_min)).values - 1 #target data normalization
 
     target_datas=create_windows(
         torch.Tensor(target_datas),
@@ -253,7 +242,7 @@ def main():
         overlap=0.95
     )
 
-    input_nrm_noised=input_nrm_datas+0.05*torch.randn_like(input_nrm_datas) #ノイズを加えたversion
+    input_nrm_noised=input_nrm_datas+0.05*torch.randn_like(input_nrm_datas) #add noise
     input_nrm_datas=torch.cat([input_nrm_datas,input_nrm_noised],dim=0)
     target_datas=torch.cat([target_datas,target_datas],dim=0)
 
@@ -278,10 +267,10 @@ def main():
 
     train_loader=torch.utils.data.DataLoader(train_dataset,batch_size=minibatch,shuffle=True,drop_last=True)
     test_loader=torch.utils.data.DataLoader(test_dataset,batch_size=minibatch,shuffle=False)
-    #<< データの準備 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #<< data preparation <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
-    #>> 学習ループ >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #>> learning loop >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     result=[]
     best_score={"mean":1e10, "std":0.0}
     for e in range(epoch):
@@ -294,7 +283,7 @@ def main():
             outputs = model(inputs)
             loss = criterion(outputs, targets)
             loss.backward()
-            model.clip_gradients() #勾配クリッピング
+            model.clip_gradients() #gradient clipping
             optim.step()
             optim.zero_grad()
             train_loss_list.append(loss.item())
@@ -353,7 +342,7 @@ def main():
             torch.save(model.state_dict(), resultpath / f"models/model_epoch_{e+1}.pth")
 
     torch.save(model.state_dict(), resultpath / f"models/model_final.pth")
-    #<< 学習ループ <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<   
+    #<< learning loop <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<   
 
 
 if __name__=="__main__":

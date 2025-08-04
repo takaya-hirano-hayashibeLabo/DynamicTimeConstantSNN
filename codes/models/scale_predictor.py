@@ -5,7 +5,7 @@ from math import log,exp
 
 class ScalePredictor():
     """
-    入力からタイムスケールを予測するクラス
+    class to predict the time scale from the input
     """
     def __init__(self,datatype="xor"):
 
@@ -15,7 +15,7 @@ class ScalePredictor():
 
     def predict_scale_trajectory(self,data:torch.Tensor):
         """
-        全stepのデータを入力とする
+        input is all step data
         :param data: [timestep x batch x x_dim]
         :return: [timestep x batch]
         """
@@ -32,7 +32,7 @@ class ScalePredictor():
 
     def predict_scale(self,data:torch.Tensor):
         """
-        1ステップ分のデータを入力とする
+        input is 1 step data
         :param data: [batch x x_dim]
         """
 
@@ -47,18 +47,18 @@ class ScalePredictor():
 
     def __predict_xor(self,data:torch.Tensor):
         """
-        xorの1ステップ分のデータが入る
+        input is 1 step data of xor
         :param data: [batch x xdim]
         """
 
-        #>> scaleとfiring rateで線形回帰したときの係数とwindow >>>>>>>>
+        #>> coefficients and window size when linear regression with scale and firing rate >>>>>>>>
         window_size=120
         slope,intercept=-1.0437631068421338,-0.6790105922709921 
-        #<< scaleとfiring rateで線形回帰したときの係数とwindow <<<<<<<<
+        #<< coefficients and window size when linear regression with scale and firing rate <<<<<<<<
         
         self.data_trj=torch.cat([self.data_trj.to(data.device),data.unsqueeze(1)],dim=1)
         if self.data_trj.shape[1]>window_size:
-            self.data_trj=self.data_trj[:,(self.data_trj.shape[1]-window_size):] #長くなりすぎたらカット
+            self.data_trj=self.data_trj[:,(self.data_trj.shape[1]-window_size):] #if too long, cut
         
         scale_log=log(self.firing_rate+1e-10)*slope + intercept
         scale=exp(scale_log)
@@ -68,24 +68,24 @@ class ScalePredictor():
 
     def __predict_gesture(self,data:torch.Tensor):
         """
-        テスト済み. 想定した通りの挙動をしている
-        gestureの1ステップ分のデータが入る
+        tested. it behaves as expected
+        input is 1 step data of gesture
         :param data: [batch x channel x w x h]
         """
-        F0=0.06945327669382095 #a=1のときの平均firing rate
-        WINDOW_SIZE=300 #frを計算するためのwindow size
+        F0=0.06945327669382095 #average firing rate when a=1
+        WINDOW_SIZE=300 #window size for calculating firing rate
         
-        # >>> データの追加とpop >>>
+        # >>> add data and pop >>>
         self.data_trj=torch.cat([self.data_trj.to(data.device),data.unsqueeze(1)],dim=1)
         if self.data_trj.shape[1]>WINDOW_SIZE:
-            self.data_trj=self.data_trj[:,(self.data_trj.shape[1]-WINDOW_SIZE):] #長くなりすぎたらカット
+            self.data_trj=self.data_trj[:,(self.data_trj.shape[1]-WINDOW_SIZE):] #if too long, cut
         # <<<<<<<<<<<<<<<<<<<<<<<<
 
-        # >>> 入力データの発火率を計算 >>>
+        # >>> calculate firing rate of input data >>>
         fr_in=self.__calc_firing_rate(self.data_trj)
         # <<<<<<<<<<<<<<<<<<<<<<<<
 
-        # >>> スケールを計算 >>>
+        # >>> calculate scale >>>
         scale=F0/fr_in
         # <<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -96,9 +96,9 @@ class ScalePredictor():
         """
         :param data: [batch x timestep x channel x w x h]
         """
-        fr=torch.mean(data,dim=1) #時間平均
-        fr=torch.mean(fr,dim=0) #バッチ平均
-        fr=torch.mean(fr) #ピクセル平均
+        fr=torch.mean(data,dim=1) #time average
+        fr=torch.mean(fr,dim=0) #batch average
+        fr=torch.mean(fr) #pixel average
         return fr.item()
 
 
@@ -107,7 +107,7 @@ class ScalePredictor():
     
     @property
     def firing_rate(self):
-        fr=torch.mean(self.data_trj,dim=1) #時間平均
-        fr=torch.mean(fr,dim=0) #バッチ平均
-        fr=torch.mean(fr) #ピクセル平均
+        fr=torch.mean(self.data_trj,dim=1) #time average
+        fr=torch.mean(fr,dim=0) #batch average
+        fr=torch.mean(fr) #pixel average
         return fr.item()
