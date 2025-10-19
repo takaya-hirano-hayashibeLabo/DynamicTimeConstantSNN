@@ -1,5 +1,5 @@
-# DynamicSNN: Enhancing Time Scalability of Spiking Neural Networks with Dynamic Time Constants
-This repository contains the code for the paper "DynamicSNN: Enhancing Time Scalability of Spiking Neural Networks with Dynamic Time Constants".
+# Enhancing Time Scalability of Spiking Neural Networks with Dynamic Time Constants
+This repository contains the code for the paper "Enhancing Time Scalability of Spiking Neural Networks with Dynamic Time Constants".
 The trained models and training data are too large to be uploaded to the repository.
 You need to download and train the models by yourself.
 (When you execute the code, it will automatically download the data from the internet or collect the data using a simulator.)
